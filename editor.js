@@ -21,7 +21,27 @@ function captureSel() {
 
 function restoreSel() {
   if (!_savedRange) return false;
-  try { const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(_savedRange); return true; } catch(e) { return false; }
+  // ── FIX: Validate that the saved range's nodes are still attached to the
+  // document. After renderPage() replaces section DOM, _savedRange points to
+  // detached nodes. addRange() on a detached range silently succeeds but
+  // produces a collapsed selection, causing "no text selected" on next highlight.
+  try {
+    const sc = _savedRange.startContainer;
+    const ec = _savedRange.endContainer;
+    if (!document.contains(sc) || !document.contains(ec)) {
+      _savedRange = null;
+      return false;
+    }
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(_savedRange);
+    // Double-check the restored selection is not collapsed
+    if (sel.isCollapsed) { _savedRange = null; return false; }
+    return true;
+  } catch(e) {
+    _savedRange = null;
+    return false;
+  }
 }
 
 // ── Mobile sidebar ────────────────────────────────────
@@ -64,6 +84,9 @@ document.getElementById('fontPicker').addEventListener('change', function() { do
 
 // ── Tree render ───────────────────────────────────────
 function renderTree(filter) {
+  // Clear stale saved range whenever the tree re-renders (DOM is about to change)
+  _savedRange = null;
+
   const list = document.getElementById('chapterList'); list.innerHTML = '';
   const q = (filter || '').toLowerCase();
   treeData.forEach(ch => {
@@ -198,6 +221,9 @@ new MutationObserver(injectChapterProgress).observe(document.getElementById('cha
 
 // ── Page / Section renderer ───────────────────────────
 function renderPage() {
+  // Clear stale saved range — section DOM is about to be replaced
+  _savedRange = null;
+
   const container = document.getElementById('sectionsContainer'), plainEditor = document.getElementById('editor');
   const titleBar = document.getElementById('pageTitleBar'), topicLabel = document.getElementById('pageTopicLabel');
   const chapterLabel = document.getElementById('pageChapterLabel'), pageProgress = document.getElementById('pageProgress');
