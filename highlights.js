@@ -15,7 +15,7 @@ function applyPreciseHighlight(color, type) {
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { showToast('Select some text first'); return; }
 
-  const range = sel.getRangeAt(0);
+  const range = sel.getRangeAt(0).cloneRange();
   const editorArea = range.commonAncestorContainer.nodeType === 1
     ? range.commonAncestorContainer
     : range.commonAncestorContainer.parentElement;
@@ -23,40 +23,28 @@ function applyPreciseHighlight(color, type) {
   if (!inEditor) { showToast('Click inside the editor first'); return; }
 
   try {
-    // ── FIX: Wrap only the selected text nodes precisely ──
-    // surroundContents() fails on cross-element ranges, and extractContents()
-    // can grab too much. Instead, iterate over every Text node in the range
-    // and wrap only the selected portion of each one.
-    const textNodes = getTextNodesInRange(range);
-    if (textNodes.length === 0) { showToast('Select some text first'); return; }
+    const nodes = getSelectedTextNodes(range);
 
-    textNodes.forEach(({ node, start, end }) => {
-      // Split off the selected portion of this text node
-      let targetNode = node;
-      if (end < node.textContent.length) targetNode = node.splitText(end);   // tail
-      if (start > 0) targetNode = node.splitText(start);                      // head stays, mid is targetNode
-      // Actually: splitText(start) mutates `node` to be the prefix and returns the suffix.
-      // Re-do cleanly:
-      // We already called splitText above — reset and do properly:
-    });
+    if (nodes.length === 0) {
+      showToast('Select some text first');
+      return;
+    }
 
-    // Clean approach: collect text nodes first, then wrap each
-    const textNodesClean = getTextNodesInRange(range);
-    const spans = [];
-    textNodesClean.forEach(({ node, start, end }) => {
-      // Split at end first (so start index is still valid), then at start
+    nodes.forEach(({ node, start, end }) => {
+      if (start >= end) return;
+      // Split tail first so start offset is still valid, then split head
       if (end < node.textContent.length) node.splitText(end);
-      const mid = start > 0 ? node.splitText(start) : node;
+      const mid = (start > 0) ? node.splitText(start) : node;
       const span = document.createElement('span');
       span.className = type === 'p' ? 'hl-span-p' : 'hl-span-m';
       span.style.background = color;
       span.style.borderRadius = '2px';
       mid.parentNode.insertBefore(span, mid);
       span.appendChild(mid);
-      spans.push(span);
     });
 
-    sel.removeAllRanges(); _savedRange = null;
+    sel.removeAllRanges();
+    _savedRange = null;
 
     // Persist to section data
     if (inEditor.classList.contains('section-editor')) {
@@ -77,36 +65,49 @@ function applyPreciseHighlight(color, type) {
 }
 
 /**
- * Returns all Text nodes that fall (even partially) within `range`,
- * along with the start/end character offsets within each node.
+ * Walk all Text nodes under range.commonAncestorContainer in DOM order.
+ * Track when we've entered the range (hit startContainer) and when we've
+ * left it (hit endContainer). Return each node with its selected char offsets.
  */
-function getTextNodesInRange(range) {
+function getSelectedTextNodes(range) {
   const result = [];
   const startNode = range.startContainer;
   const endNode   = range.endContainer;
+  const startOff  = range.startOffset;
+  const endOff    = range.endOffset;
 
-  // Walk the range's common ancestor collecting text nodes
-  const walker = document.createTreeWalker(
-    range.commonAncestorContainer,
-    NodeFilter.SHOW_TEXT,
-    null
-  );
-
-  let node;
-  while ((node = walker.nextNode())) {
-    // Check if this text node is within the range
-    const nodeRange = document.createRange();
-    nodeRange.selectNode(node);
-    // Comes before range starts → skip
-    if (nodeRange.compareBoundaryPoints(Range.END_TO_START, range) >= 0) continue;
-    // Comes after range ends → stop
-    if (nodeRange.compareBoundaryPoints(Range.START_TO_END, range) <= 0) break;
-
-    const start = node === startNode ? range.startOffset : 0;
-    const end   = node === endNode   ? range.endOffset   : node.textContent.length;
-
-    if (start < end) result.push({ node, start, end });
+  // Simple case: selection is within a single text node
+  if (startNode === endNode && startNode.nodeType === Node.TEXT_NODE) {
+    if (startOff < endOff) result.push({ node: startNode, start: startOff, end: endOff });
+    return result;
   }
+
+  const root = range.commonAncestorContainer;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+
+  let inside = false;
+
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+
+    if (!inside) {
+      if (node === startNode) {
+        inside = true;
+        const end = (node === endNode) ? endOff : node.textContent.length;
+        if (startOff < end) result.push({ node, start: startOff, end });
+        if (node === endNode) break;
+      }
+      // before range — keep walking
+    } else {
+      if (node === endNode) {
+        if (endOff > 0) result.push({ node, start: 0, end: endOff });
+        break;
+      }
+      // fully inside range
+      result.push({ node, start: 0, end: node.textContent.length });
+    }
+  }
+
   return result;
 }
 
