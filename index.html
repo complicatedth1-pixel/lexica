@@ -501,7 +501,7 @@ body.light .btn-ghost { border-color: rgba(30,24,8,0.4); }
   gap: 2rem;
   align-items: flex-start;
   cursor: pointer;
-  max-width: 680px;
+  max-width: 100%;
   padding: 1.6rem;
   border: 1px solid var(--border-color);
   border-radius: 6px;
@@ -559,6 +559,7 @@ body.light .btn-ghost { border-color: rgba(30,24,8,0.4); }
   color: var(--cream);
   margin-bottom: 0.4rem;
   line-height: 1.2;
+  word-break: break-word;
 }
 .lbc-meta { font-size: 12px; color: var(--cream2); margin-bottom: 1rem; font-weight: 300; }
 .lbc-progress-label { font-size: 11px; color: var(--cream2); margin-bottom: 6px; }
@@ -1754,7 +1755,7 @@ footer {
 <div id="authScreen" style="
   position:fixed;inset:0;z-index:9999;
   background:linear-gradient(135deg,#0d0c0a 0%,#1a1610 50%,#0d0c0a 100%);
-  display:flex;align-items:center;justify-content:center;
+  align-items:center;justify-content:center;
   font-family:'Outfit',sans-serif;
 ">
   <div style="
@@ -1856,6 +1857,7 @@ footer {
         <a href="#recent" id="nav-recent">Recent</a>
         <a href="#collections" id="nav-collections">Collections</a>
         <a href="#" id="nav-analytics" onclick="openAnalytics();return false;">Analytics</a>
+        <a href="#" id="nav-highlights" onclick="openHighlightsPage();return false;">Highlights</a>
       </ul>
       <button class="theme-toggle" id="themeToggle" title="Toggle theme"></button>
     </div>
@@ -2323,35 +2325,10 @@ function esc(s){ return escHtml(s); }
 ══════════════════════════════════════════ */
 const SUPABASE_URL = 'https://ckrtzfyqkcgnsbueetqh.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrcnR6Znlxa2NnbnNidWVldHFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0MDk4NjEsImV4cCI6MjA5Mzk4NTg2MX0.S7bRBw6jJtTHxiTgFxL_45kIeV1Q4EotKd2MFviOMac';
-/* Show raw URL on load so we can see what Google sends back */
-window.addEventListener('load', function() {
-  const dbg = (msg, color) => {
-    let box = document.getElementById('authDebugBox');
-    if (!box) { box = document.createElement('div'); box.id='authDebugBox'; box.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#111;font-family:monospace;font-size:12px;padding:10px 14px;max-height:180px;overflow-y:auto;border-top:2px solid #333;'; document.body.appendChild(box); }
-    const line = document.createElement('div'); line.style.color = color||'#8aff8a'; line.textContent = '[URL] ' + msg; box.appendChild(line); box.scrollTop = box.scrollHeight;
-  };
-  dbg('hash: ' + (window.location.hash || '(empty)'), '#aaaaff');
-  dbg('search: ' + (window.location.search || '(empty)'), '#aaaaff');
-  dbg('href: ' + window.location.href, '#aaaaff');
-});
-
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
-  auth: {
-    detectSessionInUrl: true,
-    persistSession: true,
-    autoRefreshToken: true,
-  }
+  auth: { detectSessionInUrl: true, persistSession: true, autoRefreshToken: true }
 });
 let currentUser = null;
-
-/* Clean up OAuth hash after Supabase has had time to process it */
-window.addEventListener('load', function() {
-  setTimeout(function() {
-    if (window.location.hash.includes('access_token') || window.location.search.includes('error=')) {
-      history.replaceState(null, '', window.location.pathname);
-    }
-  }, 3000);
-});
 
 /* ── Auth UI helpers ── */
 let _authTab = 'login';
@@ -2529,48 +2506,21 @@ async function loadPdfFromStorage(bookId) {
   });
 }
 
-/* ── Debug logger ── */
-function authDebug(msg, color) {
-  color = color || '#8aff8a';
-  let box = document.getElementById('authDebugBox');
-  if (!box) {
-    box = document.createElement('div');
-    box.id = 'authDebugBox';
-    box.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#111;color:#8aff8a;font-family:monospace;font-size:12px;padding:10px 14px;max-height:180px;overflow-y:auto;border-top:2px solid #333;';
-    document.body.appendChild(box);
-  }
-  const line = document.createElement('div');
-  line.style.color = color;
-  line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
-  box.appendChild(line);
-  box.scrollTop = box.scrollHeight;
-}
-
 /* ── Auth state listener — boots the app ── */
 sb.auth.onAuthStateChange((event, session) => {
-  authDebug('onAuthStateChange: event=' + event + ' user=' + (session?.user?.email || 'none'));
   if (session?.user) {
-    authDebug('Session found → calling onUserLoggedIn', '#ffff8a');
     onUserLoggedIn(session.user);
   } else if (event === 'SIGNED_OUT' || !session) {
-    authDebug('No session — showing login', '#ff8a8a');
     document.getElementById('authScreen').classList.remove('auth-hidden');
     document.getElementById('userMenu').classList.remove('user-visible');
   }
 });
 
-/* Fallback: check session on page load */
 (async function checkSessionOnLoad() {
-  authDebug('checkSessionOnLoad running...');
-  const { data, error } = await sb.auth.getSession();
-  authDebug('getSession: user=' + (data?.session?.user?.email || 'none') + (error ? ' ERROR=' + error.message : ''));
-  if (data?.session?.user) {
-    authDebug('Fallback session found → logging in', '#ffff8a');
-    onUserLoggedIn(data.session.user);
-  } else {
-    authDebug('No session on load', '#ff8a8a');
-  }
+  const { data } = await sb.auth.getSession();
+  if (data?.session?.user) onUserLoggedIn(data.session.user);
 })();
+
 /* ── Save current editor state back into the active book ── */
 function saveAll() {
   if (activeBookId) {
@@ -4148,9 +4098,10 @@ async function openPDFViewer(book) {
         buildPDFOutlineSidebar(pdf).then(() => {
           renderAllPDFPagesInEditor(pdf, pdfViewerScale);
           // Load saved time for page 1
+          swRunning = false; swStart = null; clearInterval(swTimer);
+          swStartStop.textContent = '▶';
           swElapsed = loadPDFPageTime(1);
           swDisplay.textContent = swFormat(swElapsed);
-          // Update right sidebar with any saved PDF highlights
           updatePDFHighlightSidebar();
         });
       }).catch(err => {
@@ -4270,9 +4221,14 @@ async function renderAllPDFPagesInEditor(pdf, scale) {
       if (entry.isIntersecting) {
         const newPage = parseInt(entry.target.dataset.page);
         if (newPage !== pdfCurrentPage) {
-          if (pdfCurrentPage !== null) savePDFPageTime();
+          if (pdfCurrentPage !== null) {
+            if (swRunning && swStart) { swElapsed += Date.now() - swStart; }
+            savePDFPageTime();
+          }
           pdfCurrentPage = newPage;
+          if (swRunning) { clearInterval(swTimer); swRunning = false; swStartStop.textContent = '▶'; }
           swElapsed = loadPDFPageTime(newPage);
+          swStart = null;
           swDisplay.textContent = swFormat(swElapsed);
           updatePDFWordCount(newPage);
           document.getElementById('pdfPageInfo').textContent =
@@ -4465,6 +4421,7 @@ function applyHighlightToPDF(color) {
   });
 
   saveBook(pdfViewerBook);
+  saveLibrary();
   updatePDFHighlightSidebar();
   selection.removeAllRanges();
   showToast(`Highlighted as ${hlType.toUpperCase()}`);
@@ -4654,6 +4611,112 @@ function exportBookAsPDF(book) {
 
 })();
 
+</script>
+
+<!-- HIGHLIGHTS PAGE -->
+<div id="highlightsPage" style="position:fixed;inset:0;z-index:150;overflow-y:auto;background:var(--ink);display:none;scrollbar-width:thin;scrollbar-color:rgba(212,135,42,0.2) transparent;">
+  <div style="padding:1.2rem 2.4rem;background:var(--ink);border-bottom:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:20;backdrop-filter:blur(16px);">
+    <div class="logo-text">LEXICA<sup>&#10022;</sup></div>
+    <button onclick="closeHighlightsPage()" style="background:transparent;border:1px solid var(--border-color);color:var(--cream2);font-family:'Outfit',sans-serif;font-size:12px;letter-spacing:1px;text-transform:uppercase;padding:0.5rem 1.2rem;border-radius:2px;cursor:pointer;">&#8592; Back to Home</button>
+  </div>
+  <div style="padding:3.5rem 2.4rem 2rem;border-bottom:1px solid var(--border-color);">
+    <div style="font-size:11px;letter-spacing:4px;text-transform:uppercase;color:var(--amber);margin-bottom:0.8rem;font-weight:500;">&#10022; &nbsp;Your annotations</div>
+    <h1 style="font-family:'Cormorant Garamond',serif;font-size:56px;font-weight:300;color:var(--cream);line-height:1.1;">Your <em style="font-style:italic;color:var(--amber);">Highlights</em></h1>
+    <p style="font-size:14px;color:var(--cream2);margin-top:0.8rem;font-weight:300;">All P and M highlights across every book and PDF in your library.</p>
+  </div>
+  <div style="padding:2rem 2.4rem;">
+    <div style="margin-bottom:2rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+      <label style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--cream2);">Book</label>
+      <select id="hlPageBookSelect" onchange="renderHighlightsPage()" style="background:var(--glass2);border:1px solid var(--border-color);color:var(--cream);font-family:'Outfit',sans-serif;font-size:13px;padding:0.5rem 1rem;border-radius:3px;outline:none;cursor:pointer;"></select>
+      <div style="display:flex;gap:8px;margin-left:auto;">
+        <button onclick="filterHighlights('all')" id="hlFilterAll" style="background:var(--amber);border:none;color:var(--ink);font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;">All</button>
+        <button onclick="filterHighlights('p')" id="hlFilterP" style="background:transparent;border:1px solid var(--border-color);color:var(--cream2);font-family:'Outfit',sans-serif;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;">P</button>
+        <button onclick="filterHighlights('m')" id="hlFilterM" style="background:transparent;border:1px solid var(--border-color);color:var(--cream2);font-family:'Outfit',sans-serif;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;">M</button>
+      </div>
+    </div>
+    <div id="hlPagePSection">
+      <div style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:400;color:var(--cream);margin-bottom:1.2rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border-color);">P Highlights <span id="hlPagePCount" style="font-size:16px;color:var(--amber);"></span></div>
+      <div id="hlPagePList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;margin-bottom:3rem;"></div>
+    </div>
+    <div id="hlPageMSection">
+      <div style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:400;color:var(--cream);margin-bottom:1.2rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border-color);">M Highlights <span id="hlPageMCount" style="font-size:16px;color:#6adf6a;"></span></div>
+      <div id="hlPageMList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;margin-bottom:3rem;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let _hlFilter = 'all';
+function openHighlightsPage() {
+  const sel = document.getElementById('hlPageBookSelect');
+  sel.innerHTML = '<option value="all">All Books</option>';
+  library.forEach(b => { const o=document.createElement('option'); o.value=b.id; o.textContent=b.name; sel.appendChild(o); });
+  _hlFilter='all';
+  setHlFilterBtn('all');
+  document.getElementById('highlightsPage').style.display='block';
+  renderHighlightsPage();
+}
+window.openHighlightsPage=openHighlightsPage;
+function closeHighlightsPage(){document.getElementById('highlightsPage').style.display='none';}
+window.closeHighlightsPage=closeHighlightsPage;
+function setHlFilterBtn(type){
+  ['hlFilterAll','hlFilterP','hlFilterM'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.style.background='transparent'; el.style.color='var(--cream2)'; el.style.border='1px solid var(--border-color)';
+  });
+  const map={all:'hlFilterAll',p:'hlFilterP',m:'hlFilterM'};
+  const el=document.getElementById(map[type]);
+  el.style.background=type==='m'?'rgba(106,223,106,0.2)':'var(--amber)';
+  el.style.color=type==='m'?'#6adf6a':'var(--ink)';
+  el.style.border='none';
+}
+function filterHighlights(type){_hlFilter=type;setHlFilterBtn(type);renderHighlightsPage();}
+window.filterHighlights=filterHighlights;
+function renderHighlightsPage(){
+  const bookId=document.getElementById('hlPageBookSelect').value;
+  const books=bookId==='all'?library:library.filter(b=>b.id===bookId);
+  const pItems=[],mItems=[];
+  books.forEach(book=>{
+    if(book.highlights){
+      Object.values(book.highlights).forEach(hls=>{
+        if(!Array.isArray(hls))return;
+        hls.forEach(hl=>{ const it={text:hl.text||'',bookName:book.name,source:'Book',loc:hl.sectionName||''}; (hl.type==='p'?pItems:mItems).push(it); });
+      });
+    }
+    if(book.pdfHighlights){
+      Object.entries(book.pdfHighlights).forEach(([pg,hls])=>{
+        if(!Array.isArray(hls))return;
+        hls.forEach(hl=>{ const it={text:hl.text||'',bookName:book.name,source:'PDF',loc:'Page '+pg}; (hl.type==='p'?pItems:mItems).push(it); });
+      });
+    }
+  });
+  const showP=_hlFilter==='all'||_hlFilter==='p';
+  const showM=_hlFilter==='all'||_hlFilter==='m';
+  document.getElementById('hlPagePSection').style.display=showP?'':'none';
+  document.getElementById('hlPageMSection').style.display=showM?'':'none';
+  document.getElementById('hlPagePCount').textContent='('+pItems.length+')';
+  document.getElementById('hlPageMCount').textContent='('+mItems.length+')';
+  renderHlGrid('hlPagePList',pItems,'p');
+  renderHlGrid('hlPageMList',mItems,'m');
+}
+window.renderHighlightsPage=renderHighlightsPage;
+function renderHlGrid(id,items,type){
+  const c=document.getElementById(id);
+  if(!items.length){c.innerHTML='<div style="color:var(--cream2);font-size:14px;padding:1rem 0;font-style:italic;">No '+type.toUpperCase()+' highlights yet.</div>';return;}
+  c.innerHTML='';
+  const bc=type==='p'?'rgba(212,135,42,0.35)':'rgba(106,223,106,0.35)';
+  const tc=type==='p'?'var(--amber)':'#6adf6a';
+  items.forEach(item=>{
+    const d=document.createElement('div');
+    d.style.cssText='background:rgba(255,255,255,0.03);border:1px solid '+bc+';border-radius:5px;padding:1rem 1.1rem;';
+    d.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">'
+      +'<span style="font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:'+tc+';">'+type.toUpperCase()+'</span>'
+      +'<span style="font-size:11px;color:var(--cream2);">'+esc(item.bookName)+(item.loc?' &middot; '+esc(item.loc):'')+'</span>'
+      +'</div>'
+      +'<div style="font-size:13.5px;color:var(--cream);line-height:1.65;font-family:'Lora',serif;">'+esc(item.text.substring(0,280))+(item.text.length>280?'&hellip;':'')+'</div>';
+    c.appendChild(d);
+  });
+}
 </script>
 </body>
 </html>
