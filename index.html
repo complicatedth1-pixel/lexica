@@ -826,14 +826,16 @@ footer {
   color: transparent;
 }
 .textLayer span.highlight-p {
-  background: #ffe566;
+  background: rgba(255,229,102,0.45);
   border-radius: 2px;
-  box-shadow: 0 0 0 1px #ffe566;
+  mix-blend-mode: multiply;
+  box-shadow: 0 0 0 1px rgba(255,220,0,0.3);
 }
 .textLayer span.highlight-m {
-  background: #7ddb7d;
+  background: rgba(100,220,100,0.45);
   border-radius: 2px;
-  box-shadow: 0 0 0 1px #7ddb7d;
+  mix-blend-mode: multiply;
+  box-shadow: 0 0 0 1px rgba(80,200,80,0.3);
 }
 /* Selection color matching your app theme */
 
@@ -4115,193 +4117,167 @@ async function renderAllPDFPagesInEditor(pdf, scale) {
   const pdfArea = document.getElementById('pdfCanvasArea');
   if (!pdfArea) return;
 
-  if (window._pageObserver) {
-    window._pageObserver.disconnect();
-    window._pageObserver = null;
-  }
+  if (window._pageObserver) { window._pageObserver.disconnect(); window._pageObserver = null; }
+  if (window._renderObserver) { window._renderObserver.disconnect(); window._renderObserver = null; }
 
   const wasPage = pdfCurrentPage;
   pdfArea.innerHTML = '';
+  const dpr = window.devicePixelRatio || 1;
 
-  // Build ALL wrapper shells synchronously first — this locks DOM order
+  // Pre-fetch page 1 to get viewport size for placeholders
+  const firstPage = await pdf.getPage(1);
+  const firstVp = firstPage.getViewport({ scale });
+  const pageW = Math.floor(firstVp.width);
+  const pageH = Math.floor(firstVp.height);
+
+  // Build placeholder shells — cheap, instant
   const wrappers = [];
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const wrapper = document.createElement('div');
     wrapper.dataset.page = pageNum;
+    wrapper.dataset.rendered = 'false';
     wrapper.style.cssText = [
-      'position:relative',
-      'flex-shrink:0',
+      'position:relative','flex-shrink:0',
+      `width:${pageW}px`, `min-height:${pageH}px`,
       'box-shadow:0 6px 40px rgba(0,0,0,0.45)',
-      'border-radius:3px',
-      'overflow:visible',
-      'background:#fff',
-      'margin-bottom:20px',
+      'border-radius:3px','background:#e8e0d0','margin-bottom:20px',
+      'display:flex','align-items:center','justify-content:center',
     ].join(';');
+    // Placeholder label
+    const ph = document.createElement('div');
+    ph.style.cssText = 'color:#aaa;font-size:12px;font-family:sans-serif;';
+    ph.textContent = 'Page ' + pageNum;
+    wrapper.appendChild(ph);
     pdfArea.appendChild(wrapper);
     wrappers.push(wrapper);
   }
 
-  // Single rAF after all wrappers are in DOM
   await new Promise(resolve => requestAnimationFrame(resolve));
 
+  // Page-tracking observer (updates current page indicator)
   const pageObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
         const newPage = parseInt(entry.target.dataset.page);
         if (newPage !== pdfCurrentPage) {
           if (pdfCurrentPage !== null) {
-            // Save accumulated time for the page we're leaving
-            if (swRunning && swStart) {
-              swElapsed += Date.now() - swStart;
-              swStart = Date.now(); // keep running — just reset start
-            }
+            if (swRunning && swStart) { swElapsed += Date.now() - swStart; swStart = Date.now(); }
             savePDFPageTime();
           }
           pdfCurrentPage = newPage;
-          // Load the new page's saved time as base, keep timer running if it was
           swElapsed = loadPDFPageTime(newPage);
-          if (swRunning) swStart = Date.now(); // restart accumulation for new page
+          if (swRunning) swStart = Date.now();
           swDisplay.textContent = swFormat(swElapsed);
           updatePDFWordCount(newPage);
-          document.getElementById('pdfPageInfo').textContent =
-            `Page ${newPage} / ${pdf.numPages}`;
+          document.getElementById('pdfPageInfo').textContent = `Page ${newPage} / ${pdf.numPages}`;
         }
       }
     });
-  }, { threshold: 0.5 });
-
+  }, { threshold: 0.3 });
   window._pageObserver = pageObserver;
-  const dpr = window.devicePixelRatio || 1;
+  wrappers.forEach(w => pageObserver.observe(w));
 
-  // Now render into each pre-placed wrapper
-  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    try {
-      const wrapper = wrappers[pageNum - 1];
-      const page = await pdf.getPage(pageNum);
-      const viewport = page.getViewport({ scale });
-
-      // Set wrapper width now that we know viewport size
-      wrapper.style.width = `${Math.floor(viewport.width)}px`;
-
-      const canvas = document.createElement('canvas');
-      canvas.width  = Math.floor(viewport.width  * dpr);
-      canvas.height = Math.floor(viewport.height * dpr);
-      canvas.style.width  = `${Math.floor(viewport.width)}px`;
-      canvas.style.height = `${Math.floor(viewport.height)}px`;
-      canvas.style.display = 'block';
-      wrapper.appendChild(canvas);
-
-      const textLayerDiv = document.createElement('div');
-textLayerDiv.className = 'textLayer';
-textLayerDiv.style.width = `${Math.floor(viewport.width)}px`;
-textLayerDiv.style.height = `${Math.floor(viewport.height)}px`;
-textLayerDiv.style.zIndex = '10';
-textLayerDiv.style.setProperty('--scale-factor', scale);
-      wrapper.appendChild(textLayerDiv);
-
-      const badge = document.createElement('div');
-      badge.style.cssText = [
-        'position:absolute',
-        'bottom:8px',
-        'right:10px',
-        'background:rgba(0,0,0,0.45)',
-        'color:rgba(255,255,255,0.5)',
-        'font-size:10px',
-        'font-family:sans-serif',
-        'padding:2px 9px',
-        'border-radius:10px',
-        'pointer-events:none',
-        'z-index:5',
-      ].join(';');
-      badge.textContent = `${pageNum} / ${pdf.numPages}`;
-      wrapper.appendChild(badge);
-
-      const ctx = canvas.getContext('2d');
-      await page.render({
-        canvasContext: ctx,
-        viewport,
-        transform: [dpr, 0, 0, dpr, 0, 0],
-      }).promise;
-
-      const textContent = await page.getTextContent();
-      const textDivs = [];
-      await pdfjsLib.renderTextLayer({
-        textContentSource: textContent,
-        container: textLayerDiv,
-        viewport,
-        textDivs,
-      }).promise;
-
-      if (pdfViewerBook?.pdfHighlights?.[pageNum]) {
-        let offset = 0;
-        const divOffsets = textDivs.map(d => {
-          const o = offset;
-          offset += (d.textContent || '').length;
-          return o;
-        });
-        pdfViewerBook.pdfHighlights[pageNum].forEach(hl => {
-          const idx = divOffsets.findIndex(
-            (o, i) => o <= hl.charOffset &&
-              hl.charOffset < o + (textDivs[i]?.textContent || '').length
-          );
-          if (idx !== -1) {
-            textDivs[idx].classList.add(
-              hl.type === 'p' ? 'highlight-p' : 'highlight-m'
-            );
-          }
-        });
-      }
-
-      // Annotation layer — makes PDF links (TOC, cross-refs, URLs) clickable
-      try {
-        const annotations = await page.getAnnotations();
-        const linkAnnotations = annotations.filter(a =>
-          a.subtype === 'Link' && (a.url || a.dest || a.action)
-        );
-        if (linkAnnotations.length > 0) {
-          const annotDiv = document.createElement('div');
-          annotDiv.style.cssText = [
-            'position:absolute','top:0','left:0',
-            `width:${Math.floor(viewport.width)}px`,
-            `height:${Math.floor(viewport.height)}px`,
-            'z-index:20','pointer-events:none',
-          ].join(';');
-          wrapper.appendChild(annotDiv);
-          for (const annot of linkAnnotations) {
-            const [x1,y1,x2,y2] = viewport.convertToViewportRectangle(annot.rect);
-            const linkEl = document.createElement('a');
-            linkEl.style.cssText = [
-              'position:absolute',
-              `left:${Math.min(x1,x2)}px`, `top:${Math.min(y1,y2)}px`,
-              `width:${Math.abs(x2-x1)}px`, `height:${Math.abs(y2-y1)}px`,
-              'cursor:pointer','pointer-events:all',
-            ].join(';');
-            if (annot.url) {
-              linkEl.href = annot.url; linkEl.target = '_blank'; linkEl.rel = 'noopener noreferrer';
-            } else {
-              linkEl.href = '#';
-              const dest = annot.dest;
-              linkEl.addEventListener('click', async e => {
-                e.preventDefault();
-                try {
-                  let d = dest;
-                  if (typeof d === 'string') d = await pdf.getDestination(d);
-                  if (d && d[0]) scrollToPDFPage(await pdf.getPageIndex(d[0]) + 1);
-                } catch(err) { console.warn('link nav', err); }
-              });
-            }
-            annotDiv.appendChild(linkEl);
-          }
+  // Lazy render observer — renders page when it comes near viewport
+  const renderObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const wrapper = entry.target;
+        if (wrapper.dataset.rendered === 'false') {
+          wrapper.dataset.rendered = 'rendering';
+          renderSinglePage(pdf, parseInt(wrapper.dataset.page), wrapper, scale, dpr);
         }
-      } catch(annotErr) { console.warn('annotation layer', annotErr); }
-
-      pageObserver.observe(wrapper);
-    } catch (e) {
-      console.warn('render error p' + pageNum, e);
-    }
-  }
+      }
+    });
+  }, { rootMargin: '200px 0px', threshold: 0 }); // 200px pre-load margin
+  window._renderObserver = renderObserver;
+  wrappers.forEach(w => renderObserver.observe(w));
 
   pdfCurrentPage = wasPage || 1;
+}
+
+async function renderSinglePage(pdf, pageNum, wrapper, scale, dpr) {
+  try {
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale });
+    const pageW = Math.floor(viewport.width);
+    const pageH = Math.floor(viewport.height);
+
+    wrapper.innerHTML = ''; // clear placeholder
+    wrapper.style.minHeight = '';
+    wrapper.style.width = `${pageW}px`;
+    wrapper.style.background = '#fff';
+    wrapper.style.alignItems = '';
+    wrapper.style.justifyContent = '';
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(pageW * dpr);
+    canvas.height = Math.floor(pageH * dpr);
+    canvas.style.width = `${pageW}px`;
+    canvas.style.height = `${pageH}px`;
+    canvas.style.display = 'block';
+    wrapper.appendChild(canvas);
+
+    const textLayerDiv = document.createElement('div');
+    textLayerDiv.className = 'textLayer';
+    textLayerDiv.style.width = `${pageW}px`;
+    textLayerDiv.style.height = `${pageH}px`;
+    textLayerDiv.style.zIndex = '10';
+    textLayerDiv.style.setProperty('--scale-factor', scale);
+    wrapper.appendChild(textLayerDiv);
+
+    const badge = document.createElement('div');
+    badge.style.cssText = 'position:absolute;bottom:8px;right:10px;background:rgba(0,0,0,0.45);color:rgba(255,255,255,0.5);font-size:10px;font-family:sans-serif;padding:2px 9px;border-radius:10px;pointer-events:none;z-index:5;';
+    badge.textContent = `${pageNum} / ${pdf.numPages}`;
+    wrapper.appendChild(badge);
+
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport, transform: [dpr,0,0,dpr,0,0] }).promise;
+
+    const textContent = await page.getTextContent();
+    const textDivs = [];
+    await pdfjsLib.renderTextLayer({ textContentSource: textContent, container: textLayerDiv, viewport, textDivs }).promise;
+
+    // Re-apply saved highlights
+    if (pdfViewerBook?.pdfHighlights?.[pageNum]) {
+      let offset = 0;
+      const divOffsets = textDivs.map(d => { const o = offset; offset += (d.textContent||'').length; return o; });
+      pdfViewerBook.pdfHighlights[pageNum].forEach(hl => {
+        const idx = divOffsets.findIndex((o,i) => o <= hl.charOffset && hl.charOffset < o + (textDivs[i]?.textContent||'').length);
+        if (idx !== -1) textDivs[idx].classList.add(hl.type === 'p' ? 'highlight-p' : 'highlight-m');
+      });
+    }
+
+    // Annotation / link layer
+    try {
+      const annotations = await page.getAnnotations();
+      const links = annotations.filter(a => a.subtype === 'Link' && (a.url || a.dest));
+      if (links.length > 0) {
+        const annotDiv = document.createElement('div');
+        annotDiv.style.cssText = `position:absolute;top:0;left:0;width:${pageW}px;height:${pageH}px;z-index:20;pointer-events:none;`;
+        wrapper.appendChild(annotDiv);
+        for (const annot of links) {
+          const [x1,y1,x2,y2] = viewport.convertToViewportRectangle(annot.rect);
+          const linkEl = document.createElement('a');
+          linkEl.style.cssText = `position:absolute;left:${Math.min(x1,x2)}px;top:${Math.min(y1,y2)}px;width:${Math.abs(x2-x1)}px;height:${Math.abs(y2-y1)}px;cursor:pointer;pointer-events:all;`;
+          if (annot.url) { linkEl.href = annot.url; linkEl.target = '_blank'; linkEl.rel = 'noopener noreferrer'; }
+          else {
+            linkEl.href = '#';
+            const dest = annot.dest;
+            linkEl.addEventListener('click', async e => {
+              e.preventDefault();
+              try { let d = dest; if (typeof d === 'string') d = await pdf.getDestination(d); if (d&&d[0]) scrollToPDFPage(await pdf.getPageIndex(d[0])+1); } catch(err){}
+            });
+          }
+          annotDiv.appendChild(linkEl);
+        }
+      }
+    } catch(e) {}
+
+    wrapper.dataset.rendered = 'true';
+  } catch(e) {
+    console.warn('render error p' + pageNum, e);
+    wrapper.dataset.rendered = 'false';
+  }
 }
 
 function updatePDFWordCount(pageNum) {
@@ -4326,7 +4302,16 @@ function applyHighlightToPDF(color) {
 
   const spans = Array.from(textLayer.querySelectorAll('span'))
     .filter(s => s.textContent.trim().length > 0 && !s.querySelector('*'));
-  const selectedSpans = spans.filter(span => range.intersectsNode(span));
+
+  // Use precise boundary check: span must be fully inside or touching the selection range
+  const selectedSpans = spans.filter(span => {
+    const cmp1 = range.comparePoint(span, 0);
+    const cmp2 = range.comparePoint(span, span.childNodes.length || 0);
+    // -1 = before start, 0 = inside, 1 = after end
+    // Include span if it straddles or is within the range
+    return !(cmp1 === 1 || cmp2 === -1);
+  });
+
   if (selectedSpans.length === 0) { showToast('No text selected'); return; }
 
   const hlType = color === '#ffe566' ? 'p' : 'm';
