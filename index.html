@@ -2323,6 +2323,18 @@ function esc(s){ return escHtml(s); }
 ══════════════════════════════════════════ */
 const SUPABASE_URL = 'https://ckrtzfyqkcgnsbueetqh.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrcnR6Znlxa2NnbnNidWVldHFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0MDk4NjEsImV4cCI6MjA5Mzk4NTg2MX0.S7bRBw6jJtTHxiTgFxL_45kIeV1Q4EotKd2MFviOMac';
+/* Show raw URL on load so we can see what Google sends back */
+window.addEventListener('load', function() {
+  const dbg = (msg, color) => {
+    let box = document.getElementById('authDebugBox');
+    if (!box) { box = document.createElement('div'); box.id='authDebugBox'; box.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#111;font-family:monospace;font-size:12px;padding:10px 14px;max-height:180px;overflow-y:auto;border-top:2px solid #333;'; document.body.appendChild(box); }
+    const line = document.createElement('div'); line.style.color = color||'#8aff8a'; line.textContent = '[URL] ' + msg; box.appendChild(line); box.scrollTop = box.scrollHeight;
+  };
+  dbg('hash: ' + (window.location.hash || '(empty)'), '#aaaaff');
+  dbg('search: ' + (window.location.search || '(empty)'), '#aaaaff');
+  dbg('href: ' + window.location.href, '#aaaaff');
+});
+
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: {
     detectSessionInUrl: true,
