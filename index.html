@@ -2322,8 +2322,21 @@ function esc(s){ return escHtml(s); }
 ══════════════════════════════════════════ */
 const SUPABASE_URL = 'https://ckrtzfyqkcgnsbueetqh.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrcnR6Znlxa2NnbnNidWVldHFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0MDk4NjEsImV4cCI6MjA5Mzk4NTg2MX0.S7bRBw6jJtTHxiTgFxL_45kIeV1Q4EotKd2MFviOMac';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth: {
+    detectSessionInUrl: true,
+    persistSession: true,
+    autoRefreshToken: true,
+  }
+});
 let currentUser = null;
+
+/* Clean up OAuth hash/params from URL without reloading */
+(function cleanOAuthUrl() {
+  if (window.location.hash.includes('access_token') || window.location.search.includes('error=')) {
+    history.replaceState(null, '', window.location.pathname);
+  }
+})();
 
 /* ── Auth UI helpers ── */
 let _authTab = 'login';
@@ -2347,7 +2360,7 @@ function showAuthError(msg) {
 async function signInWithGoogle() {
   const { error } = await sb.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.href }
+    options: { redirectTo: window.location.origin + window.location.pathname }
   });
   if (error) showAuthError(error.message);
 }
