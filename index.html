@@ -1370,46 +1370,7 @@ footer {
   .footer-bottom { flex-direction: column; gap: 1rem; text-align: center; }
 }
 
-/* ═══════════════════════════════════════
-   FLOATING SAVE BUTTON
-═══════════════════════════════════════ */
-#floatingSaveBtn {
-  position: fixed;
-  bottom: 28px;
-  right: 28px;
-  z-index: 9999;
-  display: none;
-  align-items: center;
-  gap: 7px;
-  background: linear-gradient(135deg, #2a6e3f 0%, #1d5230 100%);
-  color: #c8f0d8;
-  border: 1px solid rgba(80,200,120,0.35);
-  border-radius: 30px;
-  padding: 0 20px 0 16px;
-  height: 44px;
-  font-family: 'Outfit', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  cursor: pointer;
-  box-shadow: 0 6px 28px rgba(0,0,0,0.45), 0 0 0 1px rgba(80,200,120,0.15);
-  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
-  user-select: none;
-}
-#floatingSaveBtn.visible { display: flex; }
-#floatingSaveBtn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(80,200,120,0.3);
-  background: linear-gradient(135deg, #357a4a 0%, #26653c 100%);
-}
-#floatingSaveBtn:active { transform: translateY(0); }
-#floatingSaveBtn.saving {
-  background: linear-gradient(135deg, #555 0%, #333 100%);
-  color: #aaa;
-  pointer-events: none;
-}
-.fsb-icon { font-size: 16px; line-height: 1; }
-.fsb-label { line-height: 1; }
+
 
 /* ═══════════════════════════════════════
    SIDEBAR RESIZER
@@ -2287,11 +2248,6 @@ footer {
   </div>
 </div>
 
-<!-- FLOATING SAVE BUTTON -->
-<button id="floatingSaveBtn" title="Save & Download updated HTML (Ctrl+S)">
-  <span class="fsb-icon">💾</span>
-  <span class="fsb-label">Save</span>
-</button>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -2879,17 +2835,7 @@ document.getElementById('fontPicker').addEventListener('change', function(){ roo
 document.getElementById('sidebarToggle').addEventListener('click', function(){ const sb=document.getElementById('sidebar'); sb.classList.toggle('collapsed'); this.textContent=sb.classList.contains('collapsed')?'›':'‹'; });
 document.getElementById('rpToggle').addEventListener('click', function(){ const rp=document.getElementById('rightPanel'); rp.classList.toggle('collapsed'); this.textContent=rp.classList.contains('collapsed')?'‹':'›'; });
 
-/* ══════════════════════
-   FLOATING SAVE BTN VISIBILITY
-══════════════════════ */
-const _editorShellEl = document.getElementById('editor-shell');
-new MutationObserver(() => {
-  if (_editorShellEl.classList.contains('visible')) {
-    document.getElementById('floatingSaveBtn').classList.add('visible');
-  } else {
-    document.getElementById('floatingSaveBtn').classList.remove('visible');
-  }
-}).observe(_editorShellEl, { attributes: true, attributeFilter: ['class'] });
+
 
 /* ══════════════════════
    SIDEBAR RESIZE DRAG
@@ -3376,30 +3322,12 @@ window.copyPrompt = function(boxId, btnId) {
   }).catch(()=>{ const r=document.createRange(); r.selectNode(document.getElementById(boxId)); window.getSelection().removeAllRanges(); window.getSelection().addRange(r); document.execCommand('copy'); });
 };
 
-/* ══════════════════════════════════════════
-   FLOATING SAVE BUTTON
-══════════════════════════════════════════ */
-const floatingSaveBtn = document.getElementById('floatingSaveBtn');
-
+/* Ctrl+S manual cloud sync */
 async function doSaveDownload() {
   saveAll();
-  floatingSaveBtn.classList.add('saving');
-  floatingSaveBtn.querySelector('.fsb-label').textContent = 'Saving…';
-  try {
-    await saveLibrary();
-    floatingSaveBtn.querySelector('.fsb-label').textContent = 'Saved!';
-    showToast('\u2713 Synced to cloud');
-  } catch(e) {
-    showToast('\u26a0 Sync failed: ' + e.message);
-    floatingSaveBtn.querySelector('.fsb-label').textContent = 'Save';
-  }
-  setTimeout(() => {
-    floatingSaveBtn.classList.remove('saving');
-    floatingSaveBtn.querySelector('.fsb-label').textContent = 'Save';
-  }, 1600);
+  try { await saveLibrary(); showToast('✓ Synced to cloud'); }
+  catch(e) { showToast('⚠ Sync failed: ' + e.message); }
 }
-
-floatingSaveBtn.addEventListener('click', doSaveDownload);
 
 // Data loaded from Supabase via onAuthStateChange
 
@@ -4031,7 +3959,7 @@ function setPDFTopbarVisible(show) {
     if (el) el.style.display = show ? '' : 'none';
   });
   const pdfOnlyHide = ['fontPicker','btn-bold','btn-italic','btn-ul','btn-ol','btn-h3','btn-bq',
-    'btn-link','btn-undo','btn-redo','fontSizeSlider','hl-p','hl-m','manageSectionsBtn','uploadPageBtn','exportPDFBtn'];
+    'btn-link','btn-undo','btn-redo','fontSizeSlider','manageSectionsBtn','uploadPageBtn','exportPDFBtn'];
   pdfOnlyHide.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = show ? 'none' : '';
@@ -4222,13 +4150,17 @@ async function renderAllPDFPagesInEditor(pdf, scale) {
         const newPage = parseInt(entry.target.dataset.page);
         if (newPage !== pdfCurrentPage) {
           if (pdfCurrentPage !== null) {
-            if (swRunning && swStart) { swElapsed += Date.now() - swStart; }
+            // Save accumulated time for the page we're leaving
+            if (swRunning && swStart) {
+              swElapsed += Date.now() - swStart;
+              swStart = Date.now(); // keep running — just reset start
+            }
             savePDFPageTime();
           }
           pdfCurrentPage = newPage;
-          if (swRunning) { clearInterval(swTimer); swRunning = false; swStartStop.textContent = '▶'; }
+          // Load the new page's saved time as base, keep timer running if it was
           swElapsed = loadPDFPageTime(newPage);
-          swStart = null;
+          if (swRunning) swStart = Date.now(); // restart accumulation for new page
           swDisplay.textContent = swFormat(swElapsed);
           updatePDFWordCount(newPage);
           document.getElementById('pdfPageInfo').textContent =
