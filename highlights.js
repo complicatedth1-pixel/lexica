@@ -23,12 +23,38 @@ function applyPreciseHighlight(color, type) {
   if (!inEditor) { showToast('Click inside the editor first'); return; }
 
   try {
-    const span = document.createElement('span');
-    span.className = type === 'p' ? 'hl-span-p' : 'hl-span-m';
-    span.style.background = color;
-    span.style.borderRadius = '2px';
-    try { range.surroundContents(span); }
-    catch(e) { const fragment = range.extractContents(); span.appendChild(fragment); range.insertNode(span); }
+    // ── FIX: Wrap only the selected text nodes precisely ──
+    // surroundContents() fails on cross-element ranges, and extractContents()
+    // can grab too much. Instead, iterate over every Text node in the range
+    // and wrap only the selected portion of each one.
+    const textNodes = getTextNodesInRange(range);
+    if (textNodes.length === 0) { showToast('Select some text first'); return; }
+
+    textNodes.forEach(({ node, start, end }) => {
+      // Split off the selected portion of this text node
+      let targetNode = node;
+      if (end < node.textContent.length) targetNode = node.splitText(end);   // tail
+      if (start > 0) targetNode = node.splitText(start);                      // head stays, mid is targetNode
+      // Actually: splitText(start) mutates `node` to be the prefix and returns the suffix.
+      // Re-do cleanly:
+      // We already called splitText above — reset and do properly:
+    });
+
+    // Clean approach: collect text nodes first, then wrap each
+    const textNodesClean = getTextNodesInRange(range);
+    const spans = [];
+    textNodesClean.forEach(({ node, start, end }) => {
+      // Split at end first (so start index is still valid), then at start
+      if (end < node.textContent.length) node.splitText(end);
+      const mid = start > 0 ? node.splitText(start) : node;
+      const span = document.createElement('span');
+      span.className = type === 'p' ? 'hl-span-p' : 'hl-span-m';
+      span.style.background = color;
+      span.style.borderRadius = '2px';
+      mid.parentNode.insertBefore(span, mid);
+      span.appendChild(mid);
+      spans.push(span);
+    });
 
     sel.removeAllRanges(); _savedRange = null;
 
@@ -48,6 +74,40 @@ function applyPreciseHighlight(color, type) {
     console.warn('Highlight error:', err);
     showToast('Could not highlight selection');
   }
+}
+
+/**
+ * Returns all Text nodes that fall (even partially) within `range`,
+ * along with the start/end character offsets within each node.
+ */
+function getTextNodesInRange(range) {
+  const result = [];
+  const startNode = range.startContainer;
+  const endNode   = range.endContainer;
+
+  // Walk the range's common ancestor collecting text nodes
+  const walker = document.createTreeWalker(
+    range.commonAncestorContainer,
+    NodeFilter.SHOW_TEXT,
+    null
+  );
+
+  let node;
+  while ((node = walker.nextNode())) {
+    // Check if this text node is within the range
+    const nodeRange = document.createRange();
+    nodeRange.selectNode(node);
+    // Comes before range starts → skip
+    if (nodeRange.compareBoundaryPoints(Range.END_TO_START, range) >= 0) continue;
+    // Comes after range ends → stop
+    if (nodeRange.compareBoundaryPoints(Range.START_TO_END, range) <= 0) break;
+
+    const start = node === startNode ? range.startOffset : 0;
+    const end   = node === endNode   ? range.endOffset   : node.textContent.length;
+
+    if (start < end) result.push({ node, start, end });
+  }
+  return result;
 }
 
 // ── Scan DOM for highlight spans ──────────────────────

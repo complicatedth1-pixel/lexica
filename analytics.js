@@ -13,20 +13,65 @@ function formatDuration(ms) {
 
 function getAllPagesWithWPM() {
   const pages = [];
+
   window.library.forEach(book => {
-    (book.treeData||[]).forEach(ch => {
-      (ch.topics||[]).forEach(tp => {
-        const timeSpentMs = tp.timeSpent || 0;
-        const timeSpentSec = timeSpentMs / 1000;
-        let text = '';
-        (tp.sections||[]).forEach(sec => { if (sec.content) { const tmp = document.createElement('div'); tmp.innerHTML = sec.content; text += ' ' + tmp.textContent; } });
-        text = text.trim();
-        const wc = text ? text.split(/\s+/).filter(Boolean).length : (tp.wordCount || 0);
-        const wpm = (timeSpentSec > 5 && wc > 0) ? Math.round((wc/timeSpentSec)*60) : null;
-        pages.push({ pageName: tp.name, bookName: book.name, chapterName: ch.name, wordCount: wc, timeSpentMs, timeSpentSec, wpm });
+    // ── Regular (text) books ──────────────────────────
+    if (!book.isPDFViewer) {
+      (book.treeData||[]).forEach(ch => {
+        (ch.topics||[]).forEach(tp => {
+          const timeSpentMs = tp.timeSpent || 0;
+          const timeSpentSec = timeSpentMs / 1000;
+          let text = '';
+          (tp.sections||[]).forEach(sec => {
+            if (sec.content) {
+              const tmp = document.createElement('div');
+              tmp.innerHTML = sec.content;
+              text += ' ' + tmp.textContent;
+            }
+          });
+          text = text.trim();
+          const wc = text ? text.split(/\s+/).filter(Boolean).length : (tp.wordCount || 0);
+          const wpm = (timeSpentSec > 5 && wc > 0) ? Math.round((wc/timeSpentSec)*60) : null;
+          pages.push({
+            pageName: tp.name,
+            bookName: book.name,
+            chapterName: ch.name,
+            wordCount: wc,
+            timeSpentMs,
+            timeSpentSec,
+            wpm,
+            isPDF: false
+          });
+        });
       });
-    });
+    }
+
+    // ── PDF books: use pageTimes ──────────────────────
+    // FIX: PDF books have no treeData topics, so the loop above produces nothing.
+    // Instead read book.pageTimes (keyed by page number string) and estimate WPM
+    // from a standard 250-word-per-page assumption (adjustable below).
+    if (book.isPDFViewer && book.pageTimes) {
+      const WORDS_PER_PDF_PAGE = 250; // reasonable average for a text-heavy PDF page
+      Object.entries(book.pageTimes).forEach(([pageNum, timeSpentMs]) => {
+        if (!timeSpentMs || timeSpentMs <= 0) return;
+        const timeSpentSec = timeSpentMs / 1000;
+        const wc = WORDS_PER_PDF_PAGE;
+        const wpm = (timeSpentSec > 5) ? Math.round((wc / timeSpentSec) * 60) : null;
+        pages.push({
+          pageName: `Page ${pageNum}`,
+          bookName: book.name,
+          chapterName: '',
+          wordCount: wc,
+          timeSpentMs,
+          timeSpentSec,
+          wpm,
+          isPDF: true,
+          pageNum: parseInt(pageNum)
+        });
+      });
+    }
   });
+
   return pages;
 }
 
@@ -46,12 +91,20 @@ function closeAnalytics() {
 function renderAnalytics() {
   let totalChapters = 0, totalPages = 0, totalTimeMs = 0;
   window.library.forEach(book => {
-    const chapters = book.treeData || [];
-    totalChapters += chapters.length;
-    chapters.forEach(ch => {
-      totalPages += (ch.topics||[]).length;
-      (ch.topics||[]).forEach(tp => { totalTimeMs += tp.timeSpent || 0; });
-    });
+    if (book.isPDFViewer) {
+      // For PDFs: count total pages and time from pageTimes
+      totalPages += book.pdfNumPages || 0;
+      if (book.pageTimes) {
+        Object.values(book.pageTimes).forEach(t => { totalTimeMs += t || 0; });
+      }
+    } else {
+      const chapters = book.treeData || [];
+      totalChapters += chapters.length;
+      chapters.forEach(ch => {
+        totalPages += (ch.topics||[]).length;
+        (ch.topics||[]).forEach(tp => { totalTimeMs += tp.timeSpent || 0; });
+      });
+    }
   });
 
   document.getElementById('analyticsStatsGrid').innerHTML = `
@@ -82,11 +135,38 @@ function renderAnalytics() {
   if (window.innerWidth < 640) document.getElementById('analyticsTablesGrid').style.gridTemplateColumns = '1fr';
   else document.getElementById('analyticsTablesGrid').style.gridTemplateColumns = '1fr 1fr';
 
+  // ── Per-book breakdown ─────────────────────────────
   const booksGrid = document.getElementById('analyticsBooksGrid');
   if (!window.library.length) { booksGrid.innerHTML = '<div class="analytics-empty">No books yet.</div>'; return; }
   booksGrid.innerHTML = [...window.library].sort((a,b) => (b.lastOpened||0)-(a.lastOpened||0)).map(book => {
+
+    // PDF books: derive stats from pageTimes
+    if (book.isPDFViewer) {
+      let bookTimeMs = 0;
+      const pageTimesEntries = Object.entries(book.pageTimes || {});
+      pageTimesEntries.forEach(([, t]) => { bookTimeMs += t || 0; });
+      const pagesWithTime = pageTimesEntries.filter(([, t]) => t > 0).length;
+      const totalPdfPages = book.pdfNumPages || 0;
+      const pct = totalPdfPages > 0 ? Math.round(pagesWithTime / totalPdfPages * 100) : 0;
+      return `<div class="book-analytics-row">
+        <div class="book-analytics-header">
+          <div class="book-analytics-name">${escHtml(book.name)} <span style="font-size:10px;color:var(--cream2);font-weight:300;">PDF</span></div>
+          <div class="book-analytics-stats">
+            <div class="book-stat-chip"><span class="chip-val">${totalPdfPages}</span><span class="chip-lbl">Pages</span></div>
+            <div class="book-stat-chip"><span class="chip-val">${bookTimeMs>0?formatDuration(bookTimeMs):'—'}</span><span class="chip-lbl">Time</span></div>
+            <div class="book-stat-chip"><span class="chip-val">${pct}%</span><span class="chip-lbl">Read</span></div>
+          </div>
+        </div>
+        ${totalPdfPages > 0 ? `<div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.8rem;"><div class="book-analytics-track"><div class="book-analytics-fill" style="width:${pct}%"></div></div><span class="book-analytics-pct">${pagesWithTime}/${totalPdfPages} pages timed</span></div>` : ''}
+      </div>`;
+    }
+
+    // Regular books
     const chapters = book.treeData || []; let bookTimeMs = 0;
-    const filledSec = chapters.reduce((a,c) => a+(c.topics||[]).reduce((a2,t) => { bookTimeMs += t.timeSpent||0; return a2+(t.sections||[]).filter(s => s.content&&s.content.trim()).length; }, 0), 0);
+    const filledSec = chapters.reduce((a,c) => a+(c.topics||[]).reduce((a2,t) => {
+      bookTimeMs += t.timeSpent||0;
+      return a2+(t.sections||[]).filter(s => s.content&&s.content.trim()).length;
+    }, 0), 0);
     const totalSec = chapters.reduce((a,c) => a+(c.topics||[]).reduce((a2,t) => a2+(t.sections||[]).length, 0), 0);
     const pageCount = chapters.reduce((a,c) => a+(c.topics||[]).length, 0);
     const pct = totalSec > 0 ? Math.round(filledSec/totalSec*100) : 0;
