@@ -2524,6 +2524,16 @@ sb.auth.onAuthStateChange((event, session) => {
   }
 });
 
+/* Fallback: manually check for an existing session on page load.
+   Catches the case where OAuth token lands in the URL but
+   onAuthStateChange fires before the client has parsed it. */
+(async function checkSessionOnLoad() {
+  const { data } = await sb.auth.getSession();
+  if (data?.session?.user) {
+    onUserLoggedIn(data.session.user);
+  }
+})();
+
 /* ── Save current editor state back into the active book ── */
 function saveAll() {
   if (activeBookId) {
