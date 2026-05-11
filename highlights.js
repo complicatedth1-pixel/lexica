@@ -76,34 +76,75 @@ function getSelectedTextNodes(range) {
   const startOff  = range.startOffset;
   const endOff    = range.endOffset;
 
-  // Simple case: selection is within a single text node
+  // Simple case: single text node
   if (startNode === endNode && startNode.nodeType === Node.TEXT_NODE) {
     if (startOff < endOff) result.push({ node: startNode, start: startOff, end: endOff });
     return result;
   }
 
+  // Resolve element-node boundaries to actual text nodes + char offsets
+  function resolveStart(container, offset) {
+    if (container.nodeType === Node.TEXT_NODE) return { node: container, off: offset };
+    const child = container.childNodes[offset] || container.childNodes[offset - 1];
+    if (!child) return null;
+    if (container.childNodes[offset]) {
+      // offset points to a child — find first text node inside it
+      const w = document.createTreeWalker(container.childNodes[offset], NodeFilter.SHOW_TEXT);
+      const n = w.nextNode();
+      return n ? { node: n, off: 0 } : null;
+    }
+    // offset is past last child — last text node, end of it
+    const w = document.createTreeWalker(child, NodeFilter.SHOW_TEXT);
+    let last = null, n;
+    while ((n = w.nextNode())) last = n;
+    return last ? { node: last, off: last.textContent.length } : null;
+  }
+
+  function resolveEnd(container, offset) {
+    if (container.nodeType === Node.TEXT_NODE) return { node: container, off: offset };
+    if (offset === 0) return null;
+    const child = container.childNodes[offset - 1];
+    if (!child) return null;
+    const w = document.createTreeWalker(child, NodeFilter.SHOW_TEXT);
+    let last = null, n;
+    while ((n = w.nextNode())) last = n;
+    return last ? { node: last, off: last.textContent.length } : null;
+  }
+
+  const resolved_start = resolveStart(startNode, startOff);
+  const resolved_end   = resolveEnd(endNode, endOff);
+  if (!resolved_start || !resolved_end) return result;
+
+  const actualStart = resolved_start.node;
+  const actualStartOff = resolved_start.off;
+  const actualEnd = resolved_end.node;
+  const actualEndOff = resolved_end.off;
+
+  // Single resolved text node
+  if (actualStart === actualEnd) {
+    if (actualStartOff < actualEndOff)
+      result.push({ node: actualStart, start: actualStartOff, end: actualEndOff });
+    return result;
+  }
+
   const root = range.commonAncestorContainer;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-
   let inside = false;
 
   while (walker.nextNode()) {
     const node = walker.currentNode;
-
     if (!inside) {
-      if (node === startNode) {
+      if (node === actualStart) {
         inside = true;
-        const end = (node === endNode) ? endOff : node.textContent.length;
-        if (startOff < end) result.push({ node, start: startOff, end });
-        if (node === endNode) break;
+        const end = (node === actualEnd) ? actualEndOff : node.textContent.length;
+        if (actualStartOff < end) result.push({ node, start: actualStartOff, end });
+        if (node === actualEnd) break;
       }
-      // before range — keep walking
     } else {
-      if (node === endNode) {
-        if (endOff > 0) result.push({ node, start: 0, end: endOff });
+      if (node === actualEnd) {
+        if (actualEndOff > 0) result.push({ node, start: 0, end: actualEndOff });
         break;
       }
-      // fully inside range
       result.push({ node, start: 0, end: node.textContent.length });
     }
   }
