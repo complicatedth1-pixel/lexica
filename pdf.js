@@ -172,13 +172,28 @@ async function renderSinglePage(pdf, pageNum, wrapper, scale, dpr) {
     await page.render({ canvasContext: ctx, viewport: adjustedViewport, transform: [dpr,0,0,dpr,0,0] }).promise;
     const textContent = await page.getTextContent(); const textDivs = [];
     await pdfjsLib.renderTextLayer({ textContentSource: textContent, container: textLayerDiv, viewport: adjustedViewport, textDivs }).promise;
-    if (pdfViewerBook?.pdfHighlights?.[pageNum]) {
-      let offset = 0; const divOffsets = textDivs.map(d => { const o = offset; offset += (d.textContent||'').length; return o; });
-      pdfViewerBook.pdfHighlights[pageNum].forEach(hl => {
-        const idx = divOffsets.findIndex((o,i) => o <= hl.charOffset && hl.charOffset < o + (textDivs[i]?.textContent||'').length);
-        if (idx !== -1) textDivs[idx].classList.add(hl.type === 'p' ? 'highlight-p' : 'highlight-m');
-      });
-    }
+if (pdfViewerBook?.pdfHighlights?.[pageNum]) {
+  pdfViewerBook.pdfHighlights[pageNum].forEach(hl => {
+    if (!hl.rects) return;
+    const hlClass = hl.type === 'p' ? 'highlight-p' : 'highlight-m';
+    hl.rects.forEach(r => {
+      const div = document.createElement('div');
+      div.className = 'pdf-hl-overlay ' + hlClass;
+      div.style.cssText = `
+        position: absolute;
+        left: ${r.left}px;
+        top: ${r.top}px;
+        width: ${r.width}px;
+        height: ${r.height}px;
+        pointer-events: none;
+        z-index: 20;
+        mix-blend-mode: multiply;
+        border-radius: 2px;
+      `;
+      wrapper.appendChild(div);
+    });
+  });
+}
     wrapper.dataset.rendered = 'true';
   } catch(e) { console.warn('render error p' + pageNum, e); wrapper.dataset.rendered = 'false'; }
 }
@@ -186,41 +201,60 @@ async function renderSinglePage(pdf, pageNum, wrapper, scale, dpr) {
 function applyHighlightToPDF(color, hlType) {
   if (pdfCurrentPage === null) return;
   const sel = window.getSelection();
-  if (!sel || sel.isCollapsed) { showToast('Select some text first'); return; }
+  if (!sel || sel.isCollapsed || !sel.toString().trim()) { showToast('Select some text first'); return; }
 
   const range = sel.getRangeAt(0).cloneRange();
   const selectedText = sel.toString().trim();
-  if (!selectedText) { showToast('Select some text first'); return; }
 
   const pdfArea = document.getElementById('pdfCanvasArea');
-  if (!pdfArea.contains(range.commonAncestorContainer)) {
-    showToast('Click inside the PDF text'); return;
-  }
+  const wrapper = pdfArea.querySelector(`[data-page="${pdfCurrentPage}"]`);
+  if (!wrapper) return;
+  if (!wrapper.contains(range.commonAncestorContainer)) { showToast('Click inside the PDF text'); return; }
 
   const type = hlType || (color === '#ffe566' ? 'p' : 'm');
   const hlClass = type === 'p' ? 'highlight-p' : 'highlight-m';
 
-  try {
-    const extracted = range.extractContents();
-    const hlSpan = document.createElement('span');
-    hlSpan.className = hlClass;
-    hlSpan.appendChild(extracted);
-    range.insertNode(hlSpan);
-    sel.removeAllRanges();
-  } catch(e) {
-    console.warn('Highlight error:', e);
-    showToast('Could not highlight'); return;
-  }
+  // Get all client rects for the selection (one per line)
+  const rects = Array.from(range.getClientRects());
+  const wrapperRect = wrapper.getBoundingClientRect();
 
+  rects.forEach(rect => {
+    if (rect.width < 2 || rect.height < 2) return; // skip empty rects
+    const div = document.createElement('div');
+    div.className = 'pdf-hl-overlay ' + hlClass;
+    div.style.cssText = `
+      position: absolute;
+      left: ${rect.left - wrapperRect.left}px;
+      top: ${rect.top - wrapperRect.top}px;
+      width: ${rect.width}px;
+      height: ${rect.height}px;
+      pointer-events: none;
+      z-index: 20;
+      mix-blend-mode: multiply;
+      border-radius: 2px;
+    `;
+    wrapper.appendChild(div);
+  });
+
+  sel.removeAllRanges();
+
+  // Persist
   if (!pdfViewerBook.pdfHighlights) pdfViewerBook.pdfHighlights = {};
   if (!pdfViewerBook.pdfHighlights[pdfCurrentPage]) pdfViewerBook.pdfHighlights[pdfCurrentPage] = [];
   pdfViewerBook.pdfHighlights[pdfCurrentPage].push({
     type,
     text: selectedText.substring(0, 200),
-    charOffset: range.startOffset
+    charOffset: range.startOffset,
+    rects: rects.map(r => ({
+      left: r.left - wrapperRect.left,
+      top: r.top - wrapperRect.top,
+      width: r.width,
+      height: r.height
+    }))
   });
 
   saveBook(pdfViewerBook); saveLibrary(); updatePDFHighlightSidebar();
+  showToast(`✦ Highlighted as ${type.toUpperCase()}`);
 }
 
 function updatePDFHighlightSidebar() {

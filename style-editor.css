@@ -292,3 +292,5 @@
   outline-offset: 2px;
   opacity: 1 !important;
 }
+.pdf-hl-overlay.highlight-p { background: #ffe566; opacity: 0.5; }
+.pdf-hl-overlay.highlight-m { background: #7ddb7d; opacity: 0.5; }
