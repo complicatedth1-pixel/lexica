@@ -179,12 +179,14 @@ if (pdfViewerBook?.pdfHighlights?.[pageNum]) {
     hl.rects.forEach(r => {
       const div = document.createElement('div');
       div.className = 'pdf-hl-overlay ' + hlClass;
-      div.style.cssText = `
+div.style.cssText = `
         position: absolute;
         left: ${r.left}px;
         top: ${r.top}px;
         width: ${r.width}px;
         height: ${r.height}px;
+        background: ${hl.type === 'p' ? '#ffe566' : '#7ddb7d'};
+        opacity: 0.5;
         pointer-events: none;
         z-index: 20;
         mix-blend-mode: multiply;
@@ -222,12 +224,14 @@ function applyHighlightToPDF(color, hlType) {
     if (rect.width < 2 || rect.height < 2) return; // skip empty rects
     const div = document.createElement('div');
     div.className = 'pdf-hl-overlay ' + hlClass;
-    div.style.cssText = `
+div.style.cssText = `
       position: absolute;
       left: ${rect.left - wrapperRect.left}px;
       top: ${rect.top - wrapperRect.top}px;
       width: ${rect.width}px;
       height: ${rect.height}px;
+      background: ${color};
+      opacity: 0.5;
       pointer-events: none;
       z-index: 20;
       mix-blend-mode: multiply;
