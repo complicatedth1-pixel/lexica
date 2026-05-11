@@ -173,28 +173,33 @@ async function renderSinglePage(pdf, pageNum, wrapper, scale, dpr) {
     const textContent = await page.getTextContent(); const textDivs = [];
     await pdfjsLib.renderTextLayer({ textContentSource: textContent, container: textLayerDiv, viewport: adjustedViewport, textDivs }).promise;
 if (pdfViewerBook?.pdfHighlights?.[pageNum]) {
-  pdfViewerBook.pdfHighlights[pageNum].forEach(hl => {
-    if (!hl.rects) return;
-    const hlClass = hl.type === 'p' ? 'highlight-p' : 'highlight-m';
-    hl.rects.forEach(r => {
-      const div = document.createElement('div');
-      div.className = 'pdf-hl-overlay ' + hlClass;
-div.style.cssText = `
-        position: absolute;
-        left: ${r.left}px;
-        top: ${r.top}px;
-        width: ${r.width}px;
-        height: ${r.height}px;
-        background: ${hl.type === 'p' ? '#ffe566' : '#7ddb7d'};
-        opacity: 0.5;
-        pointer-events: none;
-        z-index: 20;
-        mix-blend-mode: multiply;
-        border-radius: 2px;
-      `;
-      wrapper.appendChild(div);
-    });
+let overlayContainer = wrapper.querySelector('.pdf-hl-container');
+if (!overlayContainer) {
+  overlayContainer = document.createElement('div');
+  overlayContainer.className = 'pdf-hl-container';
+  overlayContainer.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:25;';
+  wrapper.appendChild(overlayContainer);
+}
+pdfViewerBook.pdfHighlights[pageNum].forEach(hl => {
+  if (!hl.rects) return;
+  const hlColor = hl.type === 'p' ? '#ffe566' : '#7ddb7d';
+  hl.rects.forEach(r => {
+    const div = document.createElement('div');
+    div.style.cssText = `
+      position: absolute;
+      left: ${r.left}px;
+      top: ${r.top}px;
+      width: ${r.width}px;
+      height: ${r.height}px;
+      background: ${hlColor};
+      opacity: 0.45;
+      pointer-events: none;
+      mix-blend-mode: multiply;
+      border-radius: 2px;
+    `;
+    overlayContainer.appendChild(div);
   });
+});
 }
     wrapper.dataset.rendered = 'true';
   } catch(e) { console.warn('render error p' + pageNum, e); wrapper.dataset.rendered = 'false'; }
@@ -220,25 +225,32 @@ function applyHighlightToPDF(color, hlType) {
   const rects = Array.from(range.getClientRects());
   const wrapperRect = wrapper.getBoundingClientRect();
 
-  rects.forEach(rect => {
-    if (rect.width < 2 || rect.height < 2) return; // skip empty rects
-    const div = document.createElement('div');
-    div.className = 'pdf-hl-overlay ' + hlClass;
-div.style.cssText = `
-      position: absolute;
-      left: ${rect.left - wrapperRect.left}px;
-      top: ${rect.top - wrapperRect.top}px;
-      width: ${rect.width}px;
-      height: ${rect.height}px;
-      background: ${color};
-      opacity: 0.5;
-      pointer-events: none;
-      z-index: 20;
-      mix-blend-mode: multiply;
-      border-radius: 2px;
-    `;
-    wrapper.appendChild(div);
-  });
+// Get or create a dedicated overlay container inside the wrapper
+let overlayContainer = wrapper.querySelector('.pdf-hl-container');
+if (!overlayContainer) {
+  overlayContainer = document.createElement('div');
+  overlayContainer.className = 'pdf-hl-container';
+  overlayContainer.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:25;';
+  wrapper.appendChild(overlayContainer);
+}
+
+rects.forEach(rect => {
+  if (rect.width < 2 || rect.height < 2) return;
+  const div = document.createElement('div');
+  div.style.cssText = `
+    position: absolute;
+    left: ${rect.left - wrapperRect.left}px;
+    top: ${rect.top - wrapperRect.top}px;
+    width: ${rect.width}px;
+    height: ${rect.height}px;
+    background: ${color};
+    opacity: 0.45;
+    pointer-events: none;
+    mix-blend-mode: multiply;
+    border-radius: 2px;
+  `;
+  overlayContainer.appendChild(div);
+});
 
   sel.removeAllRanges();
 
