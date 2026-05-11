@@ -185,71 +185,49 @@ async function renderSinglePage(pdf, pageNum, wrapper, scale, dpr) {
 
 function applyHighlightToPDF(color) {
   if (pdfCurrentPage === null) return;
-  const selection = window.getSelection();
-  if (!selection || selection.isCollapsed) { showToast('Select some text first'); return; }
-  const range = selection.getRangeAt(0);
-  const textLayer = document.querySelector(`#pdfCanvasArea [data-page="${pdfCurrentPage}"] .textLayer`);
-  if (!textLayer) return;
-  const spans = Array.from(textLayer.querySelectorAll('span')).filter(s => s.textContent.trim().length > 0 && !s.querySelector('*'));
+  
+  // Use saved range since mousedown clears selection
+  if (!restoreSel()) {
+    showToast('Select some text first'); return;
+  }
+  
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed) { showToast('Select some text first'); return; }
+  
+  const range = sel.getRangeAt(0).cloneRange();
+  const selectedText = sel.toString().trim();
+  if (!selectedText) { showToast('Select some text first'); return; }
 
-  const selectedSpans = spans.filter(span => {
-    try {
-      const spanRange = document.createRange();
-      spanRange.selectNodeContents(span);
-      // Only include if there's actual overlap with the user's selection
-      return range.compareBoundaryPoints(Range.END_TO_START, spanRange) < 0 &&
-             range.compareBoundaryPoints(Range.START_TO_END, spanRange) > 0;
-    } catch(e) { return false; }
-  });
-
-  if (selectedSpans.length === 0) { showToast('No text selected'); return; }
+  const pdfArea = document.getElementById('pdfCanvasArea');
+  if (!pdfArea.contains(range.commonAncestorContainer)) {
+    showToast('Click inside the PDF text'); return;
+  }
 
   const hlType = color === '#ffe566' ? 'p' : 'm';
   const hlClass = hlType === 'p' ? 'highlight-p' : 'highlight-m';
 
-  selectedSpans.forEach(span => {
-    // If this span is fully inside the range, highlight the whole span
-    try {
-      const spanRange = document.createRange();
-      spanRange.selectNodeContents(span);
-      const startsBefore = range.compareBoundaryPoints(Range.START_TO_START, spanRange) <= 0;
-      const endsAfter    = range.compareBoundaryPoints(Range.END_TO_END, spanRange) >= 0;
-
-      if (startsBefore && endsAfter) {
-        // Whole span is selected — wrap it directly
-        span.classList.add(hlClass);
-      } else {
-        // Partial span — only wrap the selected portion
-        const subRange = range.cloneRange();
-        // Clamp to this span's contents
-        if (range.compareBoundaryPoints(Range.START_TO_START, spanRange) < 0) subRange.setStart(span.firstChild || span, 0);
-        if (range.compareBoundaryPoints(Range.END_TO_END, spanRange) > 0) subRange.setEnd(span.firstChild || span, (span.firstChild ? span.firstChild.textContent.length : 0));
-        const extracted = subRange.extractContents();
-        const hlSpan = document.createElement('span');
-        hlSpan.className = hlClass;
-        hlSpan.appendChild(extracted);
-        subRange.insertNode(hlSpan);
-      }
-    } catch(e) {
-      span.classList.add(hlClass); // fallback
-    }
-  });
+  try {
+    const extracted = range.extractContents();
+    const hlSpan = document.createElement('span');
+    hlSpan.className = hlClass;
+    hlSpan.appendChild(extracted);
+    range.insertNode(hlSpan);
+    sel.removeAllRanges();
+    _savedRange = null;
+  } catch(e) {
+    console.warn('Highlight error:', e);
+    showToast('Could not highlight'); return;
+  }
 
   if (!pdfViewerBook.pdfHighlights) pdfViewerBook.pdfHighlights = {};
   if (!pdfViewerBook.pdfHighlights[pdfCurrentPage]) pdfViewerBook.pdfHighlights[pdfCurrentPage] = [];
-  let offset = 0;
-  const spanOffsets = spans.map(s => { const o = offset; offset += s.textContent.length; return o; });
-  selectedSpans.forEach(span => {
-    const idx = spans.indexOf(span);
-    if (idx !== -1) {
-      const charOffset = spanOffsets[idx];
-      if (!pdfViewerBook.pdfHighlights[pdfCurrentPage].some(h => h.charOffset === charOffset)) {
-        pdfViewerBook.pdfHighlights[pdfCurrentPage].push({ charOffset, len: span.textContent.length, type: hlType, text: span.textContent.substring(0, 200) });
-      }
-    }
+  pdfViewerBook.pdfHighlights[pdfCurrentPage].push({
+    type: hlType,
+    text: selectedText.substring(0, 200),
+    charOffset: range.startOffset
   });
 
-  saveBook(pdfViewerBook); saveLibrary(); updatePDFHighlightSidebar(); selection.removeAllRanges();
+  saveBook(pdfViewerBook); saveLibrary(); updatePDFHighlightSidebar();
   showToast(`Highlighted as ${hlType.toUpperCase()}`);
 }
 
