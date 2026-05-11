@@ -285,3 +285,10 @@
 .note-card { background: rgba(160,130,220,0.08); border: 1px solid rgba(160,130,220,0.13); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
 .note-card p { font-size: 11px; font-family: sans-serif; color: #887fa0; line-height: 1.5; }
 .note-card .note-tag { font-size: 9px; color: #554e68; margin-top: 4px; letter-spacing: 0.06em; }
+
+/* ── extra,highlighter ── */
+.hl-active {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+  opacity: 1 !important;
+}

@@ -183,17 +183,11 @@ async function renderSinglePage(pdf, pageNum, wrapper, scale, dpr) {
   } catch(e) { console.warn('render error p' + pageNum, e); wrapper.dataset.rendered = 'false'; }
 }
 
-function applyHighlightToPDF(color) {
+function applyHighlightToPDF(color, hlType) {
   if (pdfCurrentPage === null) return;
-  
-  // Use saved range since mousedown clears selection
-  if (!restoreSel()) {
-    showToast('Select some text first'); return;
-  }
-  
   const sel = window.getSelection();
   if (!sel || sel.isCollapsed) { showToast('Select some text first'); return; }
-  
+
   const range = sel.getRangeAt(0).cloneRange();
   const selectedText = sel.toString().trim();
   if (!selectedText) { showToast('Select some text first'); return; }
@@ -203,8 +197,8 @@ function applyHighlightToPDF(color) {
     showToast('Click inside the PDF text'); return;
   }
 
-  const hlType = color === '#ffe566' ? 'p' : 'm';
-  const hlClass = hlType === 'p' ? 'highlight-p' : 'highlight-m';
+  const type = hlType || (color === '#ffe566' ? 'p' : 'm');
+  const hlClass = type === 'p' ? 'highlight-p' : 'highlight-m';
 
   try {
     const extracted = range.extractContents();
@@ -213,7 +207,6 @@ function applyHighlightToPDF(color) {
     hlSpan.appendChild(extracted);
     range.insertNode(hlSpan);
     sel.removeAllRanges();
-    _savedRange = null;
   } catch(e) {
     console.warn('Highlight error:', e);
     showToast('Could not highlight'); return;
@@ -222,13 +215,12 @@ function applyHighlightToPDF(color) {
   if (!pdfViewerBook.pdfHighlights) pdfViewerBook.pdfHighlights = {};
   if (!pdfViewerBook.pdfHighlights[pdfCurrentPage]) pdfViewerBook.pdfHighlights[pdfCurrentPage] = [];
   pdfViewerBook.pdfHighlights[pdfCurrentPage].push({
-    type: hlType,
+    type,
     text: selectedText.substring(0, 200),
     charOffset: range.startOffset
   });
 
   saveBook(pdfViewerBook); saveLibrary(); updatePDFHighlightSidebar();
-  showToast(`Highlighted as ${hlType.toUpperCase()}`);
 }
 
 function updatePDFHighlightSidebar() {

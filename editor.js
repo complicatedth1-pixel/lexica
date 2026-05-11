@@ -377,10 +377,48 @@ document.getElementById('btn-redo').addEventListener('mousedown', e => { e.preve
 editor.addEventListener('click', e => { const a = e.target.closest('a'); if (a && a.href) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); } });
 
 // Highlight buttons
-document.getElementById('hl-p').addEventListener('mousedown', e => { e.preventDefault(); captureSel(); setTimeout(() => { if (pdfMode && pdfCurrentPage !== null) applyHighlightToPDF('#ffe566'); else applyPreciseHighlight('#ffe566', 'p'); }, 0); });
-document.getElementById('hl-m').addEventListener('mousedown', e => { e.preventDefault(); captureSel(); setTimeout(() => { if (pdfMode && pdfCurrentPage !== null) applyHighlightToPDF('#7ddb7d'); else applyPreciseHighlight('#7ddb7d', 'm'); }, 0); });
-document.getElementById('hl-p').addEventListener('touchend', e => { e.preventDefault(); if (pdfMode && pdfCurrentPage !== null) applyHighlightToPDF('#ffe566'); else applyPreciseHighlight('#ffe566', 'p'); });
-document.getElementById('hl-m').addEventListener('touchend', e => { e.preventDefault(); if (pdfMode && pdfCurrentPage !== null) applyHighlightToPDF('#7ddb7d'); else applyPreciseHighlight('#7ddb7d', 'm'); });
+let activeHlType = null; // 'p', 'm', or null
+
+function setActiveHighlighter(type) {
+  const hlP = document.getElementById('hl-p');
+  const hlM = document.getElementById('hl-m');
+  if (activeHlType === type) {
+    // Toggle off
+    activeHlType = null;
+    hlP.classList.remove('hl-active');
+    hlM.classList.remove('hl-active');
+    showToast('Highlighter off');
+  } else {
+    activeHlType = type;
+    hlP.classList.toggle('hl-active', type === 'p');
+    hlM.classList.toggle('hl-active', type === 'm');
+    showToast(type === 'p' ? '✦ Yellow highlighter on' : '✦ Green highlighter on');
+  }
+}
+
+document.getElementById('hl-p').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('p'); });
+document.getElementById('hl-m').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('m'); });
+
+// Auto-highlight on mouseup / touchend when a highlighter is active
+document.addEventListener('mouseup', e => {
+  if (!activeHlType) return;
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed) return;
+  const color = activeHlType === 'p' ? '#ffe566' : '#7ddb7d';
+  if (pdfMode && pdfCurrentPage !== null) applyHighlightToPDF(color, activeHlType);
+  else applyPreciseHighlight(color, activeHlType);
+});
+
+document.addEventListener('touchend', e => {
+  if (!activeHlType) return;
+  setTimeout(() => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+    const color = activeHlType === 'p' ? '#ffe566' : '#7ddb7d';
+    if (pdfMode && pdfCurrentPage !== null) applyHighlightToPDF(color, activeHlType);
+    else applyPreciseHighlight(color, activeHlType);
+  }, 100);
+});
 
 document.getElementById('exportPDFBtn').addEventListener('click', () => window.print());
 
