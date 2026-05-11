@@ -188,17 +188,25 @@ function applyHighlightToPDF(color) {
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed) { showToast('Select some text first'); return; }
   const range = selection.getRangeAt(0);
-  const textLayer = document.querySelector(`#pdfCanvasArea [data-page="${pdfCurrentPage}"] .textLayer`); if (!textLayer) return;
+  const textLayer = document.querySelector(`#pdfCanvasArea [data-page="${pdfCurrentPage}"] .textLayer`);
+  if (!textLayer) return;
   const spans = Array.from(textLayer.querySelectorAll('span')).filter(s => s.textContent.trim().length > 0 && !s.querySelector('*'));
   const selectedSpans = spans.filter(span => {
-    try { const cmp1 = range.comparePoint(span, 0); const cmp2 = range.comparePoint(span, span.childNodes.length || 0); return !(cmp1 === 1 || cmp2 === -1); } catch(e) { return false; }
+    try {
+      const spanRange = document.createRange();
+      spanRange.selectNode(span);
+      return range.compareBoundaryPoints(Range.END_TO_START, spanRange) <= 0 &&
+             range.compareBoundaryPoints(Range.START_TO_END, spanRange) >= 0;
+    } catch(e) { return false; }
   });
   if (selectedSpans.length === 0) { showToast('No text selected'); return; }
-  const hlType = color === '#ffe566' ? 'p' : 'm'; const hlClass = hlType === 'p' ? 'highlight-p' : 'highlight-m';
+  const hlType = color === '#ffe566' ? 'p' : 'm';
+  const hlClass = hlType === 'p' ? 'highlight-p' : 'highlight-m';
   selectedSpans.forEach(span => span.classList.add(hlClass));
   if (!pdfViewerBook.pdfHighlights) pdfViewerBook.pdfHighlights = {};
   if (!pdfViewerBook.pdfHighlights[pdfCurrentPage]) pdfViewerBook.pdfHighlights[pdfCurrentPage] = [];
-  let offset = 0; const spanOffsets = spans.map(s => { const o = offset; offset += s.textContent.length; return o; });
+  let offset = 0;
+  const spanOffsets = spans.map(s => { const o = offset; offset += s.textContent.length; return o; });
   selectedSpans.forEach(span => {
     const idx = spans.indexOf(span);
     if (idx !== -1) {
