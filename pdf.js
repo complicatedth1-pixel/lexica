@@ -191,18 +191,50 @@ function applyHighlightToPDF(color) {
   const textLayer = document.querySelector(`#pdfCanvasArea [data-page="${pdfCurrentPage}"] .textLayer`);
   if (!textLayer) return;
   const spans = Array.from(textLayer.querySelectorAll('span')).filter(s => s.textContent.trim().length > 0 && !s.querySelector('*'));
+
   const selectedSpans = spans.filter(span => {
     try {
       const spanRange = document.createRange();
-      spanRange.selectNode(span);
-      return range.compareBoundaryPoints(Range.END_TO_START, spanRange) <= 0 &&
-             range.compareBoundaryPoints(Range.START_TO_END, spanRange) >= 0;
+      spanRange.selectNodeContents(span);
+      // Only include if there's actual overlap with the user's selection
+      return range.compareBoundaryPoints(Range.END_TO_START, spanRange) < 0 &&
+             range.compareBoundaryPoints(Range.START_TO_END, spanRange) > 0;
     } catch(e) { return false; }
   });
+
   if (selectedSpans.length === 0) { showToast('No text selected'); return; }
+
   const hlType = color === '#ffe566' ? 'p' : 'm';
   const hlClass = hlType === 'p' ? 'highlight-p' : 'highlight-m';
-  selectedSpans.forEach(span => span.classList.add(hlClass));
+
+  selectedSpans.forEach(span => {
+    // If this span is fully inside the range, highlight the whole span
+    try {
+      const spanRange = document.createRange();
+      spanRange.selectNodeContents(span);
+      const startsBefore = range.compareBoundaryPoints(Range.START_TO_START, spanRange) <= 0;
+      const endsAfter    = range.compareBoundaryPoints(Range.END_TO_END, spanRange) >= 0;
+
+      if (startsBefore && endsAfter) {
+        // Whole span is selected — wrap it directly
+        span.classList.add(hlClass);
+      } else {
+        // Partial span — only wrap the selected portion
+        const subRange = range.cloneRange();
+        // Clamp to this span's contents
+        if (range.compareBoundaryPoints(Range.START_TO_START, spanRange) < 0) subRange.setStart(span.firstChild || span, 0);
+        if (range.compareBoundaryPoints(Range.END_TO_END, spanRange) > 0) subRange.setEnd(span.firstChild || span, (span.firstChild ? span.firstChild.textContent.length : 0));
+        const extracted = subRange.extractContents();
+        const hlSpan = document.createElement('span');
+        hlSpan.className = hlClass;
+        hlSpan.appendChild(extracted);
+        subRange.insertNode(hlSpan);
+      }
+    } catch(e) {
+      span.classList.add(hlClass); // fallback
+    }
+  });
+
   if (!pdfViewerBook.pdfHighlights) pdfViewerBook.pdfHighlights = {};
   if (!pdfViewerBook.pdfHighlights[pdfCurrentPage]) pdfViewerBook.pdfHighlights[pdfCurrentPage] = [];
   let offset = 0;
@@ -216,6 +248,7 @@ function applyHighlightToPDF(color) {
       }
     }
   });
+
   saveBook(pdfViewerBook); saveLibrary(); updatePDFHighlightSidebar(); selection.removeAllRanges();
   showToast(`Highlighted as ${hlType.toUpperCase()}`);
 }
