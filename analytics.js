@@ -74,11 +74,14 @@ function getAllUnconfirmedPages() {
 function confirmPage(bookId, topicId, pageNum) {
   const book = window.library.find(b => b.id === bookId);
   if (!book) return;
-  if (book.isPDFViewer && pageNum !== undefined) {
+if (book.isPDFViewer && pageNum !== undefined) {
     if (!book.pageConfirmed) book.pageConfirmed = {};
     book.pageConfirmed[String(pageNum)] = true;
     saveBook(book);
-  } else if (topicId) {
+    showToast('✓ Page marked as read');
+    renderAnalytics();
+  }
+   else if (topicId) {
     let found = false;
     (book.treeData||[]).forEach(ch => { ch.topics.forEach(tp => { if (tp.id === topicId) { tp.confirmed = true; found = true; } }); });
     if (found) {
