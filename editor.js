@@ -287,14 +287,96 @@ function renderSectionsList() {
 
 // ── Upload Page / Chapter Modals ──────────────────────
 const uploadPageModal = document.getElementById('uploadPageModal');
-function buildPagePrompt() { const tp = getSelectedTopic(); const ch = getChapter(selectedChapterId); if (!tp || !ch) return '(No topic selected)'; const sections = (tp.sections||[]).map((s,i) => `${i+1}. ${s.title}`).join('\n'); return `Book: ${bookName}\nChapter: ${ch.name}\nTopic: ${tp.name}\nSections:\n${sections||'(none)'}\n\n---\nReturn ONLY a single HTML file:\n<div class="lesson-content"><div class="lesson-section" data-title="SECTION_TITLE"><h3>Title</h3><p>Content...</p></div></div>`; }
-document.getElementById('uploadPageBtn').addEventListener('click', () => { document.getElementById('pagePromptBox').textContent = buildPagePrompt(); document.getElementById('uploadPageStatus').textContent = ''; uploadPageModal.classList.add('open'); });
+function buildPagePrompt() {
+  const tp = getSelectedTopic();
+  const ch = getChapter(selectedChapterId);
+  if (!tp || !ch) return '(No topic selected)';
+ 
+  const sections = (tp.sections || []).map((s, i) => `${i + 1}. ${s.title}`).join('\n');
+ 
+  // Get active instructions from preset system (falls back to default if none set)
+  const instructions = window.promptSettings
+    ? window.promptSettings.getInstructions('page')
+    : '';
+ 
+  return `${instructions ? instructions + '\n\n---\n\n' : ''}TASK: Write structured lesson content for this specific page.
+ 
+Book: ${bookName}
+Chapter: ${ch.name}
+Page: ${tp.name}
+Sections to cover (in order):
+${sections || '(none)'}
+ 
+OUTPUT ONLY this HTML, no preamble, no markdown fences:
+ 
+<!DOCTYPE html>
+<html>
+<body>
+<div class="lesson-content" data-page="${tp.name}">
+  <div class="lesson-section" data-title="[EXACT SECTION 1 TITLE]">
+    <h3>[Section 1 Title]</h3>
+    <p>Content for section 1...</p>
+  </div>
+  <div class="lesson-section" data-title="[EXACT SECTION 2 TITLE]">
+    <h3>[Section 2 Title]</h3>
+    <p>Content for section 2...</p>
+  </div>
+</div>
+</body>
+</html>
+ 
+CRITICAL RULES:
+1. Each <div class="lesson-section"> must have data-title="..." that is EXACTLY the section title as listed above (character-for-character match).
+2. Output one .lesson-section per section listed — no more, no less.
+3. Use <h3> for sub-headings inside a section, <p> for paragraphs, <ul>/<ol> for lists, <blockquote> for key insights.
+4. Make content thorough — 150-400 words per section.
+5. Include clickable source links as <a href="url" target="_blank">Source</a>`;
+}
+document.getElementById('uploadPageBtn').addEventListener('click', () => {
+  document.getElementById('pagePromptBox').textContent = buildPagePrompt();
+  document.getElementById('uploadPageStatus').textContent = '';
+  uploadPageModal.classList.add('open');
+});
 document.getElementById('uploadPageClose').addEventListener('click', () => uploadPageModal.classList.remove('open'));
 uploadPageModal.addEventListener('click', e => { if (e.target === uploadPageModal) uploadPageModal.classList.remove('open'); });
 
 const uploadChapterModal = document.getElementById('uploadChapterModal');
-function buildChapterPrompt() { return `Book: ${bookName}\n\nReturn ONLY a single HTML file:\n<div class="brain-index">\n  <h1>Chapter Name</h1>\n  <div class="page" order="1">Topic 1</div>\n  <div class="page" order="2">Topic 2</div>\n</div>`; }
-document.getElementById('uploadChapterBtn').addEventListener('click', () => { document.getElementById('chapterPromptBox').textContent = buildChapterPrompt(); document.getElementById('uploadChapterStatus').textContent = ''; uploadChapterModal.classList.add('open'); });
+function buildChapterPrompt() {
+  const instructions = window.promptSettings
+    ? window.promptSettings.getInstructions('index')
+    : '';
+ 
+  return `${instructions ? instructions + '\n\n---\n\n' : ''}TASK: Create a complete chapter structure with pages for the topic I give you.
+ 
+Book: ${bookName}
+ 
+OUTPUT ONLY this HTML, no explanation:
+ 
+<!DOCTYPE html>
+<html>
+<body>
+<div class="brain-index">
+  <h1>[CHAPTER NAME]</h1>
+  <div class="page" order="1">[Page 1 Title]</div>
+  <div class="page" order="2">[Page 2 Title]</div>
+  <div class="page" order="3">[Page 3 Title]</div>
+</div>
+</body>
+</html>
+ 
+Rules:
+- h1 = exact chapter name
+- Each .page = one learnable topic (4-8 pages per chapter)
+- Page titles should be specific and action-oriented (e.g. "1.1 Agriculture ka structural paradox" not just "Agriculture")
+- Order attribute determines sequence
+ 
+Now create chapter and pages for: [YOUR TOPIC HERE]`;
+}
+document.getElementById('uploadChapterBtn').addEventListener('click', () => {
+  document.getElementById('chapterPromptBox').textContent = buildChapterPrompt();
+  document.getElementById('uploadChapterStatus').textContent = '';
+  uploadChapterModal.classList.add('open');
+});
 document.getElementById('uploadChapterClose').addEventListener('click', () => uploadChapterModal.classList.remove('open'));
 uploadChapterModal.addEventListener('click', e => { if (e.target === uploadChapterModal) uploadChapterModal.classList.remove('open'); });
 
@@ -317,8 +399,40 @@ document.getElementById('uploadChapterFile').addEventListener('change', function
 });
 
 let aiTargetSection = null;
-function openAIGenForSection(sec) { const tp = getSelectedTopic(); const ch = getChapter(selectedChapterId); if (!tp || !ch) return; aiTargetSection = sec; document.getElementById('pagePromptBox').textContent = `Book: ${bookName}\nChapter: ${ch.name}\nSection: ${sec.title}\n\nReturn ONLY:\n<div class="lesson-content"><div class="lesson-section" data-title="${sec.title}"><h3>${escHtml(sec.title)}</h3><p>Content...</p></div></div>`; document.getElementById('uploadPageStatus').textContent = ''; uploadPageModal.classList.add('open'); }
-
+function openAIGenForSection(sec) {
+  const tp = getSelectedTopic();
+  const ch = getChapter(selectedChapterId);
+  if (!tp || !ch) return;
+  aiTargetSection = sec;
+ 
+  const instructions = window.promptSettings
+    ? window.promptSettings.getInstructions('page')
+    : '';
+ 
+  document.getElementById('pagePromptBox').textContent =
+    `${instructions ? instructions + '\n\n---\n\n' : ''}TASK: Write content for a single section.
+ 
+Book: ${bookName}
+Chapter: ${ch.name}
+Section: ${sec.title}
+ 
+OUTPUT ONLY this HTML, no preamble, no markdown fences:
+ 
+<!DOCTYPE html>
+<html>
+<body>
+<div class="lesson-content">
+  <div class="lesson-section" data-title="${sec.title}">
+    <h3>${escHtml(sec.title)}</h3>
+    <p>Content...</p>
+  </div>
+</div>
+</body>
+</html>`;
+ 
+  document.getElementById('uploadPageStatus').textContent = '';
+  uploadPageModal.classList.add('open');
+}
 document.getElementById('uploadPageFile').addEventListener('change', function() {
   const file = this.files[0]; if (!file) return;
   const status = document.getElementById('uploadPageStatus'); const reader = new FileReader();
