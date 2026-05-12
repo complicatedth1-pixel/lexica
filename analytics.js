@@ -74,7 +74,7 @@ function getAllUnconfirmedPages() {
 function confirmPage(bookId, topicId, pageNum) {
   const book = window.library.find(b => b.id === bookId);
   if (!book) return;
-if (book.isPDFViewer && pageNum !== undefined) {
+if (book.isPDFViewer && pageNum !== undefined && pageNum !== 'undefined') {
     if (!book.pageConfirmed) book.pageConfirmed = {};
     book.pageConfirmed[String(pageNum)] = true;
     saveBook(book);
