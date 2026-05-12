@@ -134,6 +134,8 @@ async function renderAllPDFPagesInEditor(pdf, scale) {
           if (swRunning) swStart = Date.now();
           swDisplay.textContent = swFormat(swElapsed);
           document.getElementById('pdfPageInfo').textContent = `Page ${newPage} / ${pdf.numPages}`;
+          // Update the confirm button when page changes
+          if (window.renderPDFConfirmBtn) window.renderPDFConfirmBtn();
         }
       }
     });
@@ -150,6 +152,8 @@ async function renderAllPDFPagesInEditor(pdf, scale) {
   }, { rootMargin: '300px 0px', threshold: 0 });
   window._renderObserver = renderObserver; wrappers.forEach(w => renderObserver.observe(w));
   pdfCurrentPage = wasPage || 1;
+  // Initial render of confirm button after page load/change
+  if (window.renderPDFConfirmBtn) window.renderPDFConfirmBtn();
 }
 
 async function renderSinglePage(pdf, pageNum, wrapper, scale, dpr) {
@@ -307,6 +311,31 @@ function capturePDFVisibleArea() {
   a.download = `${(pdfViewerBook&&pdfViewerBook.name)||'page'}-p${best.closest('[data-page]').dataset.page}.png`;
   a.click(); showToast(`✓ Captured page ${best.closest('[data-page]').dataset.page}`);
 }
+
+// ── PDF "Mark as Read" Confirm Button ──────────────
+function renderPDFConfirmBtn() {
+  const existing = document.getElementById('pdfConfirmBtn');
+  if (existing) existing.remove();
+  if (!pdfViewerBook || pdfCurrentPage === null) return;
+  if (!pdfViewerBook.pageConfirmed) pdfViewerBook.pageConfirmed = {};
+  const isConfirmed = pdfViewerBook.pageConfirmed[pdfCurrentPage] === true;
+  const btn = document.createElement('button');
+  btn.id = 'pdfConfirmBtn';
+  btn.textContent = isConfirmed ? '✓ Read' : '○ Mark as Read';
+  btn.style.cssText = `background:${isConfirmed?'rgba(90,180,90,0.18)':'rgba(255,255,255,0.05)'};border:1px solid ${isConfirmed?'rgba(90,180,90,0.4)':'rgba(255,255,255,0.12)'};color:${isConfirmed?'#80d880':'#887fa0'};font-family:sans-serif;font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;`;
+  btn.addEventListener('click', () => {
+    if (!pdfViewerBook.pageConfirmed) pdfViewerBook.pageConfirmed = {};
+    pdfViewerBook.pageConfirmed[pdfCurrentPage] = !pdfViewerBook.pageConfirmed[pdfCurrentPage];
+    saveBook(pdfViewerBook);
+    renderPDFConfirmBtn();
+    showToast(pdfViewerBook.pageConfirmed[pdfCurrentPage] ? '✓ Page marked as read' : 'Page unmarked');
+  });
+  // Insert into PDF toolbar — wherever your page nav controls are
+  const pdfToolbar = document.getElementById('pdfControls') || document.getElementById('pdfToolbar');
+  if (pdfToolbar) pdfToolbar.appendChild(btn);
+}
+
+window.renderPDFConfirmBtn = renderPDFConfirmBtn;
 
 // Clean up PDF mode on home
 document.getElementById('homeLink').addEventListener('click', () => {

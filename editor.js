@@ -227,6 +227,7 @@ function renderPage() {
   const container = document.getElementById('sectionsContainer'), plainEditor = document.getElementById('editor');
   const titleBar = document.getElementById('pageTitleBar'), topicLabel = document.getElementById('pageTopicLabel');
   const chapterLabel = document.getElementById('pageChapterLabel'), pageProgress = document.getElementById('pageProgress');
+  
   const tp = getSelectedTopic();
   if (!tp) { container.innerHTML = ''; plainEditor.style.display = 'block'; titleBar.style.display = 'none'; updateWordCount(); return; }
   const ch = getChapter(selectedChapterId);
@@ -234,6 +235,25 @@ function renderPage() {
   topicLabel.textContent = tp.name; chapterLabel.textContent = ch ? '— ' + ch.name : '';
   if (!swRunning) { swElapsed = tp.timeSpent || 0; swSessionElapsed = 0; swDisplay.textContent = swElapsed > 0 ? swFormat(swElapsed) : '00:00'; }
   if (ch && ch.topics) { const pn = ch.topics.findIndex(t => t.id === tp.id) + 1; pageProgress.textContent = `Page ${pn} of ${ch.topics.length}`; }
+
+  // ── Confirmation tick ──
+  // Remove existing confirm btn if any (from previous render)
+  const oldConfirmBtn = document.getElementById('pageConfirmBtn');
+  if (oldConfirmBtn) oldConfirmBtn.remove();
+  const isConfirmed = tp.confirmed === true;
+  const confirmBtn = document.createElement('button');
+  confirmBtn.id = 'pageConfirmBtn';
+  confirmBtn.title = isConfirmed ? 'Mark as unread' : 'Confirm page read';
+  confirmBtn.textContent = isConfirmed ? '✓ Read' : '○ Mark as Read';
+  confirmBtn.style.cssText = `margin-top:6px;display:inline-flex;align-items:center;gap:5px;background:${isConfirmed?'rgba(90,180,90,0.18)':'rgba(255,255,255,0.05)'};border:1px solid ${isConfirmed?'rgba(90,180,90,0.4)':'rgba(255,255,255,0.12)'};color:${isConfirmed?'#80d880':'#887fa0'};font-family:sans-serif;font-size:11px;letter-spacing:.06em;padding:4px 10px;border-radius:4px;cursor:pointer;transition:all .15s;`;
+  confirmBtn.addEventListener('click', () => {
+    tp.confirmed = !tp.confirmed;
+    saveAll();
+    renderPage();
+    showToast(tp.confirmed ? '✓ Page marked as read' : 'Page unmarked');
+  });
+  pageTitleBar.appendChild(confirmBtn);
+
   if (!tp.sections) tp.sections = [];
   if (tp.sections.length === 0) { container.innerHTML = `<div style="padding:20px 0;text-align:center;font-family:sans-serif;font-size:13px;color:#a09080;font-style:italic;">No sections yet. Click <strong style="color:#c0b8d0;">⊞ Sections</strong> to add sections.</div>`; updateWordCount(); return; }
   container.innerHTML = '';
