@@ -74,7 +74,9 @@ async function loadLibraryFromSupabase() {
       highlights: r.highlights || {}, notes: r.notes || {},
       lastOpened: r.last_opened || 0, isPDF: r.is_pdf || false,
       isPDFViewer: r.is_pdf_viewer || false, pdfNumPages: r.pdf_num_pages || null,
-      pageTimes: r.page_times || {}, pdfHighlights: r.pdf_highlights || {}
+      pageTimes: r.page_times || {}, 
+      pdfHighlights: r.pdf_highlights || {},
+      pageConfirmed: r.page_confirmed || {}
     }));
   }
   try { window.activeBookId = localStorage.getItem('folio-activeBook') || null; } catch(e){}
