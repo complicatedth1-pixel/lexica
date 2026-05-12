@@ -45,7 +45,8 @@ async function saveBook(book) {
     notes: book.notes || {}, last_opened: book.lastOpened || 0,
     is_pdf: book.isPDF || false, is_pdf_viewer: book.isPDFViewer || false,
     pdf_num_pages: book.pdfNumPages || null, page_times: book.pageTimes || {},
-    pdf_highlights: book.pdfHighlights || {}
+    pdf_highlights: book.pdfHighlights || {},
+    page_confirmed: book.pageConfirmed || {}
   };
   await sb.from('books').upsert(row, { onConflict: 'id,user_id' });
 }
