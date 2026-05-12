@@ -314,25 +314,28 @@ function capturePDFVisibleArea() {
 
 // ── PDF "Mark as Read" Confirm Button ──────────────
 function renderPDFConfirmBtn() {
-  const existing = document.getElementById('pdfConfirmBtn');
-  if (existing) existing.remove();
-  if (!pdfViewerBook || pdfCurrentPage === null) return;
+  let btn = document.getElementById('pdfConfirmBtn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'pdfConfirmBtn';
+    btn.style.cssText = `position:fixed;bottom:28px;right:28px;z-index:999;font-family:sans-serif;font-size:13px;padding:10px 20px;border-radius:8px;cursor:pointer;transition:all .2s;box-shadow:0 4px 18px rgba(0,0,0,0.35);`;
+    document.body.appendChild(btn);
+  }
+  if (!pdfViewerBook || pdfCurrentPage === null) { btn.style.display = 'none'; return; }
   if (!pdfViewerBook.pageConfirmed) pdfViewerBook.pageConfirmed = {};
   const isConfirmed = pdfViewerBook.pageConfirmed[pdfCurrentPage] === true;
-  const btn = document.createElement('button');
-  btn.id = 'pdfConfirmBtn';
+  btn.style.display = 'inline-flex';
+  btn.style.background = isConfirmed ? 'rgba(90,180,90,0.22)' : 'rgba(40,36,54,0.95)';
+  btn.style.border = `1px solid ${isConfirmed ? 'rgba(90,180,90,0.5)' : 'rgba(255,255,255,0.15)'}`;
+  btn.style.color = isConfirmed ? '#80d880' : '#c0b8d0';
   btn.textContent = isConfirmed ? '✓ Read' : '○ Mark as Read';
-  btn.style.cssText = `background:${isConfirmed?'rgba(90,180,90,0.18)':'rgba(255,255,255,0.05)'};border:1px solid ${isConfirmed?'rgba(90,180,90,0.4)':'rgba(255,255,255,0.12)'};color:${isConfirmed?'#80d880':'#887fa0'};font-family:sans-serif;font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;`;
-  btn.addEventListener('click', () => {
+  btn.onclick = () => {
     if (!pdfViewerBook.pageConfirmed) pdfViewerBook.pageConfirmed = {};
     pdfViewerBook.pageConfirmed[pdfCurrentPage] = !pdfViewerBook.pageConfirmed[pdfCurrentPage];
     saveBook(pdfViewerBook);
     renderPDFConfirmBtn();
     showToast(pdfViewerBook.pageConfirmed[pdfCurrentPage] ? '✓ Page marked as read' : 'Page unmarked');
-  });
-  // Insert into PDF toolbar — wherever your page nav controls are
-  const pdfToolbar = document.getElementById('pdfControls') || document.getElementById('pdfToolbar');
-  if (pdfToolbar) pdfToolbar.appendChild(btn);
+  };
 }
 
 window.renderPDFConfirmBtn = renderPDFConfirmBtn;

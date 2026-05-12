@@ -229,7 +229,15 @@ function renderPage() {
   const chapterLabel = document.getElementById('pageChapterLabel'), pageProgress = document.getElementById('pageProgress');
   
   const tp = getSelectedTopic();
-  if (!tp) { container.innerHTML = ''; plainEditor.style.display = 'block'; titleBar.style.display = 'none'; updateWordCount(); return; }
+  if (!tp) {
+  container.innerHTML = '';
+  plainEditor.style.display = 'block';
+  titleBar.style.display = 'none';
+  const cb = document.getElementById('pageConfirmBtn');
+  if (cb) cb.style.display = 'none';
+  updateWordCount();
+  return;
+}
   const ch = getChapter(selectedChapterId);
   plainEditor.style.display = 'none'; titleBar.style.display = 'block';
   topicLabel.textContent = tp.name; chapterLabel.textContent = ch ? '— ' + ch.name : '';
@@ -238,20 +246,25 @@ function renderPage() {
 
   // ── Confirmation tick ──
   // Remove existing confirm btn if any (from previous render)
-  const oldConfirmBtn = document.getElementById('pageConfirmBtn');
-  if (oldConfirmBtn) oldConfirmBtn.remove();
-  const isConfirmed = tp.confirmed === true;
-  const confirmBtn = document.createElement('button');
+let confirmBtn = document.getElementById('pageConfirmBtn');
+if (!confirmBtn) {
+  confirmBtn = document.createElement('button');
   confirmBtn.id = 'pageConfirmBtn';
-  confirmBtn.title = isConfirmed ? 'Mark as unread' : 'Confirm page read';
-  confirmBtn.textContent = isConfirmed ? '✓ Read' : '○ Mark as Read';
-  confirmBtn.style.cssText = `margin-top:6px;display:inline-flex;align-items:center;gap:5px;background:${isConfirmed?'rgba(90,180,90,0.18)':'rgba(255,255,255,0.05)'};border:1px solid ${isConfirmed?'rgba(90,180,90,0.4)':'rgba(255,255,255,0.12)'};color:${isConfirmed?'#80d880':'#887fa0'};font-family:sans-serif;font-size:11px;letter-spacing:.06em;padding:4px 10px;border-radius:4px;cursor:pointer;transition:all .15s;`;
-  confirmBtn.addEventListener('click', () => {
-    tp.confirmed = !tp.confirmed;
-    saveAll();
-    renderPage();
-    showToast(tp.confirmed ? '✓ Page marked as read' : 'Page unmarked');
-  });
+  confirmBtn.style.cssText = `position:fixed;bottom:28px;right:28px;z-index:999;font-family:sans-serif;font-size:13px;padding:10px 20px;border-radius:8px;cursor:pointer;transition:all .2s;box-shadow:0 4px 18px rgba(0,0,0,0.35);`;
+  document.body.appendChild(confirmBtn);
+}
+const isConfirmed = tp.confirmed === true;
+confirmBtn.style.display = 'inline-flex';
+confirmBtn.style.background = isConfirmed ? 'rgba(90,180,90,0.22)' : 'rgba(40,36,54,0.95)';
+confirmBtn.style.border = `1px solid ${isConfirmed ? 'rgba(90,180,90,0.5)' : 'rgba(255,255,255,0.15)'}`;
+confirmBtn.style.color = isConfirmed ? '#80d880' : '#c0b8d0';
+confirmBtn.textContent = isConfirmed ? '✓ Read' : '○ Mark as Read';
+confirmBtn.onclick = () => {
+  tp.confirmed = !tp.confirmed;
+  saveAll();
+  renderPage();
+  showToast(tp.confirmed ? '✓ Page marked as read' : 'Page unmarked');
+};
   pageTitleBar.appendChild(confirmBtn);
 
   if (!tp.sections) tp.sections = [];
