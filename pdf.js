@@ -349,6 +349,8 @@ document.getElementById('homeLink').addEventListener('click', () => {
   const pageCard = document.getElementById('pageCard'); pageCard.removeAttribute('style');
   const pdfArea = document.getElementById('pdfCanvasArea'); if (pdfArea) pdfArea.remove();
   document.getElementById('editor').style.display = '';
+  const pdfBtn = document.getElementById('pdfConfirmBtn');
+  if (pdfBtn) pdfBtn.style.display = 'none';
 }, true);
 
 window.openPDFViewer = openPDFViewer;
