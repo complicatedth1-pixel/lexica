@@ -70,6 +70,7 @@ document.addEventListener('click', e => {
   }
 });
 
+// auth.js — replace onUserLoggedIn
 function onUserLoggedIn(user) {
   currentUser = user;
   document.getElementById('authScreen').classList.add('auth-hidden');
@@ -78,6 +79,7 @@ function onUserLoggedIn(user) {
   document.getElementById('userAvatarBtn').textContent = initial;
   document.getElementById('userEmailDisplay').textContent = user.email || '';
   loadLibraryFromSupabase(); // defined in library.js
+  if (window.promptSettings) window.promptSettings.init(); // ← add this
 }
 
 sb.auth.onAuthStateChange((event, session) => {
@@ -99,3 +101,4 @@ window.signInWithGoogle = signInWithGoogle;
 window.submitAuth = submitAuth;
 window.signOut = signOut;
 window.toggleUserDropdown = toggleUserDropdown;
+window._supabase = sb;
