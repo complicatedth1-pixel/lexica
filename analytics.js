@@ -81,16 +81,24 @@ function confirmPage(bookId, topicId, pageNum) {
   } else if (topicId) {
     let found = false;
     (book.treeData||[]).forEach(ch => { ch.topics.forEach(tp => { if (tp.id === topicId) { tp.confirmed = true; found = true; } }); });
-    if (found) saveBook(book);
+    if (found) {
+  saveBook(book);
+  showToast('✓ Page marked as read');
+  renderAnalytics();
+}
   }
 }
 
 function confirmAllUnconfirmed(filterBookId) {
   window.library.forEach(book => {
     if (filterBookId && book.id !== filterBookId) return;
-    if (!book.isPDFViewer) {
-      (book.treeData||[]).forEach(ch => { ch.topics.forEach(tp => { if ((tp.timeSpent||0) > 0 && tp.confirmed !== true) tp.confirmed = true; }); });
-      saveBook(book);
+if (!book.isPDFViewer) {
+  (book.treeData||[]).forEach(ch => { ch.topics.forEach(tp => { if ((tp.timeSpent||0) > 0 && tp.confirmed !== true) tp.confirmed = true; }); });
+  // Also sync global treeData if this is the active book
+  if (book.id === window.activeBookId && typeof treeData !== 'undefined') {
+    treeData = book.treeData;
+  }
+  saveBook(book);
     } else if (book.pageTimes) {
       if (!book.pageConfirmed) book.pageConfirmed = {};
       Object.keys(book.pageTimes).forEach(pg => { if (book.pageTimes[pg] > 0) book.pageConfirmed[pg] = true; });
