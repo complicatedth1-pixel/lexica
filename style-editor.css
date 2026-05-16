@@ -463,6 +463,7 @@ line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
+  background: #fffdf8; /* prevents dark shell showing through during flip animation */
 }
 
 #fbBook { transform-origin: top left; flex-shrink: 0; }
@@ -663,8 +664,19 @@ line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   position: relative;
 }
 /* Ensure stf wrapper is opaque (fixes transparent backwards flip) */
+/* The stf__item itself is positioned by StPageFlip — make inner content fill it */
 .stf__item { background: #fffdf8 !important; }
-.stf__block { background: transparent; }
+/* stf__block must be opaque white — dark shell shows through otherwise */
+.stf__block { background: #fffdf8 !important; }
+/* The actual page div inside stf__item must fill it fully */
+.stf__item > .fb-page,
+.stf__item > .fb-book-page {
+  position: absolute !important;
+  top: 0 !important; left: 0 !important;
+  width: 100% !important; height: 100% !important;
+}
+/* Temporary copy (cloned page during flip) must also be opaque */
+.stf__item.--soft { background: #fffdf8 !important; }
 /* Inline bar controls */
 .fb-layout-btn {
   background: transparent;

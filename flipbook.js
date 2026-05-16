@@ -153,6 +153,7 @@ document.getElementById('fbPrevBtn').addEventListener('click', () => _pageFlip &
     e.preventDefault();
     if (window.activeHlType || document.body.classList.contains('hl-active-mode')) return;
     zoomTo(_scale + (e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP), false);
+    updateFlipLock();
   }, { passive: false });
 
   window.addEventListener('resize', () => {
@@ -313,18 +314,15 @@ function zoomTo(s, animated) {
   applyZoom(animated !== false);
 }
 
-// Flip-lock overlay (blocks page-flip clicks when zoomed or highlighting)
+// Flip-lock: disable StPageFlip mouse events when zoomed or in highlight mode.
+// This lets our own drag-to-pan work while preventing unwanted page flips.
 function updateFlipLock() {
-  let ov = document.getElementById('fbFlipLockOverlay');
-  if (!ov && getCvs()) {
-    ov = document.createElement('div');
-    ov.id = 'fbFlipLockOverlay';
-    ov.style.cssText = 'position:absolute;inset:0;z-index:9999;display:none;';
-    getCvs().appendChild(ov);
-  }
-  if (!ov) return;
   const locked = isZoomed() || document.body.classList.contains('hl-active-mode');
-  ov.style.display = locked ? 'block' : 'none';
+  if (_pageFlip) {
+    try { _pageFlip.getSettings().useMouseEvents = !locked; } catch(e) {}
+  }
+  const bkEl = getBk();
+  if (bkEl) bkEl.classList.toggle('fb-flip-locked', locked);
 }
 window._fbUpdateFlipLock = updateFlipLock;
 
@@ -455,16 +453,26 @@ async function initPdfFlipbook(pdf, book) {
     size:                'fixed',
     showCover:           false,
     drawShadow:          true,
-    maxShadowOpacity:    0.35,
-    flippingTime:        500,
+    maxShadowOpacity:    0.5,
+    flippingTime:        600,
     usePortrait:         !isDouble,
     startPage:           0,
     swipeDistance:       30,
     useMouseEvents:      true,
-showPageCorners:     false,
-    disableFlipByClick:  true,
+    showPageCorners:     true,
+    disableFlipByClick:  false,
     autoSize:            false,
   });
+  // Pre-render pages 0-3 BEFORE loadFromHTML so StPageFlip's first paint
+  // already has content — fixes "shows current page" on first flip
+  const PRELOAD = Math.min(4, pageItems.length);
+  const preloadPromises = [];
+  for (let i = 0; i < PRELOAD; i++) {
+    pageItems[i].el.dataset.rendered = 'true';
+    preloadPromises.push(renderPdfPage(pdf, pageItems[i].pageNum, pageItems[i].canvas));
+  }
+  await Promise.allSettled(preloadPromises);
+
   _pageFlip.loadFromHTML(Array.from(bkEl.querySelectorAll('.fb-page')));
 
 _pageFlip.on('changeState', (e) => {
@@ -487,12 +495,14 @@ _pageFlip.on('changeState', (e) => {
   updateFbUI();
   applyZoom(false);
 
-  // Lazy render — use larger rootMargin so adjacent pages pre-render (fixes blank on flip)
-  // Pre-render first 6 pages immediately (covers double-page spread + 1 ahead)
+  // Lazy render remaining pages — use larger rootMargin so adjacent pages pre-render (fixes blank on flip)
+  // First EAGER pages: render immediately (0-3 already done above, rest filled now)
 const EAGER = Math.min(10, pageItems.length);
   for (let i = 0; i < EAGER; i++) {
-    pageItems[i].el.dataset.rendered = 'true';
-    renderPdfPage(pdf, pageItems[i].pageNum, pageItems[i].canvas);
+    if (pageItems[i].el.dataset.rendered === 'false') {
+      pageItems[i].el.dataset.rendered = 'true';
+      renderPdfPage(pdf, pageItems[i].pageNum, pageItems[i].canvas);
+    }
   }
 
   // For remaining pages, render in rolling batches triggered by flip events
@@ -789,14 +799,14 @@ async function _initBookFlip() {
     size:               'fixed',
     showCover:          true,
     drawShadow:         true,
-    maxShadowOpacity:   0.35,
+    maxShadowOpacity:   0.5,
     flippingTime:       600,
     usePortrait:        !isDouble,
     startPage:          0,
     swipeDistance:      30,
     useMouseEvents:     true,
-    showPageCorners:    false,       // prevents runaway corner animation
-    disableFlipByClick: true,        // use Prev/Next buttons only (fixes reversed click direction)
+    showPageCorners:    true,
+    disableFlipByClick: false,
     autoSize:           false,
   });
 
