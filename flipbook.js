@@ -241,7 +241,7 @@ function sizeViewport() {
 const isZoomed = () => _scale > 1.005;
 
 function applyZoom(animated) {
-  const vpEl  = getVp(),  cvsEl = getCvs(), bkEl = getBk();
+  const vpEl  = getVp(), cvsEl = getCvs(), bkEl = getBk();
   if (!vpEl || !cvsEl || !bkEl) return;
 
   const isDouble = _pdfLayout === 'double';
@@ -249,27 +249,50 @@ function applyZoom(animated) {
   const spreadH  = PG_H;
   const total    = _autoScale * _scale;
 
-  const cw = Math.round(spreadW * total);
-  const ch = Math.round(spreadH * total);
+  // Use CSS transform on the canvas rather than resizing it.
+  // This is GPU-composited and avoids the blank-flash caused by canvas relayout.
+  const dur = animated ? '0.2s' : '0s';
+  // cvsEl acts as the scroll-content box — keep its size at _autoScale only,
+  // and apply _scale as an additional transform on #fbBook.
+  const baseW = Math.round(spreadW * _autoScale);
+  const baseH = Math.round(spreadH * _autoScale);
+  cvsEl.style.width  = baseW + 'px';
+  cvsEl.style.height = baseH + 'px';
+  cvsEl.style.transition = 'none';
 
-  const prevCW = cvsEl.offsetWidth  || spreadW;
-  const prevCH = cvsEl.offsetHeight || spreadH;
+  // Scale #fbBook from top-left so scrolling math stays simple
+  bkEl.style.transition     = `transform ${dur}`;
+  bkEl.style.transformOrigin = '0 0';
+  bkEl.style.transform = `scale(${total})`;
+
+  // Expand scroll area to match the visually scaled size
+  const scaledW = Math.round(spreadW * total);
+  const scaledH = Math.round(spreadH * total);
+
+  // Preserve scroll center across zoom changes
   const cx = vpEl.scrollLeft + vpEl.clientWidth  / 2;
   const cy = vpEl.scrollTop  + vpEl.clientHeight / 2;
-  const rx = cx / prevCW, ry = cy / prevCH;
+  const prevW = parseFloat(vpEl.dataset.contentW) || baseW;
+  const prevH = parseFloat(vpEl.dataset.contentH) || baseH;
+  const rx = cx / prevW, ry = cy / prevH;
 
-  const dur = animated ? '0.2s' : '0s';
-  cvsEl.style.transition = `width ${dur}, height ${dur}`;
-  bkEl.style.transition  = `transform ${dur}`;
-  cvsEl.style.width  = cw + 'px';
-  cvsEl.style.height = ch + 'px';
-  bkEl.style.transformOrigin = 'top left';
-  bkEl.style.transform = `scale(${total})`;
+  // Update the scroll-container's inner size via a wrapper trick
+  let spacer = vpEl.querySelector('.fb-zoom-spacer');
+  if (!spacer) {
+    spacer = document.createElement('div');
+    spacer.className = 'fb-zoom-spacer';
+    spacer.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;';
+    vpEl.appendChild(spacer);
+  }
+  spacer.style.width  = scaledW + 'px';
+  spacer.style.height = scaledH + 'px';
+  vpEl.dataset.contentW = scaledW;
+  vpEl.dataset.contentH = scaledH;
 
   requestAnimationFrame(() => {
     if (isZoomed()) {
-      vpEl.scrollLeft = rx * cw - vpEl.clientWidth  / 2;
-      vpEl.scrollTop  = ry * ch - vpEl.clientHeight / 2;
+      vpEl.scrollLeft = rx * scaledW - vpEl.clientWidth  / 2;
+      vpEl.scrollTop  = ry * scaledH - vpEl.clientHeight / 2;
     } else {
       vpEl.scrollLeft = 0; vpEl.scrollTop = 0;
     }
@@ -284,8 +307,11 @@ function applyZoom(animated) {
   if (outBtn) outBtn.disabled = _scale <= ZOOM_MIN;
   if (inBtn)  inBtn.disabled  = _scale >= ZOOM_MAX;
 
-  // Re-render PDF pages at new quality when zoomed
-  if (_mode === 'pdf' && _doc && isZoomed()) rerenderVisiblePdfPages();
+  // Re-render PDF pages at new quality when zoomed (deferred to avoid mid-animation stutter)
+  if (_mode === 'pdf' && _doc && isZoomed()) {
+    clearTimeout(applyZoom._rerenderTimer);
+    applyZoom._rerenderTimer = setTimeout(rerenderVisiblePdfPages, 220);
+  }
 }
 
 function zoomTo(s, animated) {
@@ -435,15 +461,14 @@ async function initPdfFlipbook(pdf, book) {
     size:                'fixed',
     showCover:           false,
     drawShadow:          true,
-    maxShadowOpacity:    0.5,
+    maxShadowOpacity:    0.35,
     flippingTime:        500,
     usePortrait:         !isDouble,
     startPage:           0,
     swipeDistance:       30,
     useMouseEvents:      true,
-    showPageCorners:     true,
-    disableFlipByClick:  false,
-    // Pre-render both faces so backwards-flip shows the correct page, not a blank
+showPageCorners:     false,
+    disableFlipByClick:  true,
     autoSize:            false,
   });
   _pageFlip.loadFromHTML(Array.from(bkEl.querySelectorAll('.fb-page')));
@@ -470,7 +495,7 @@ _pageFlip.on('changeState', (e) => {
 
   // Lazy render — use larger rootMargin so adjacent pages pre-render (fixes blank on flip)
   // Pre-render first 6 pages immediately (covers double-page spread + 1 ahead)
-  const EAGER = Math.min(6, pageItems.length);
+const EAGER = Math.min(10, pageItems.length);
   for (let i = 0; i < EAGER; i++) {
     pageItems[i].el.dataset.rendered = 'true';
     renderPdfPage(pdf, pageItems[i].pageNum, pageItems[i].canvas);
@@ -478,9 +503,9 @@ _pageFlip.on('changeState', (e) => {
 
   // For remaining pages, render in rolling batches triggered by flip events
   // so the pages ahead of current position are always ready
-  function preRenderAround(currentIndex) {
-    const LOOK_AHEAD = 4;
-    const start = Math.max(EAGER, currentIndex - 1);
+function preRenderAround(currentIndex) {
+    const LOOK_AHEAD = 6;
+    const start = Math.max(0, currentIndex - 2);
     const end   = Math.min(pageItems.length - 1, currentIndex + LOOK_AHEAD);
     for (let i = start; i <= end; i++) {
       const item = pageItems[i];
@@ -584,6 +609,13 @@ window._closeFlipbookViewer = function (skipHomeClick) {
 (function () {
 'use strict';
 
+// Local escHtml fallback in case library.js hasn't run yet
+const escHtml = window.escHtml || function(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+};
+
+// A4 usable content areastrict';
+
 // A4 usable content area (padding 56px each side, 48px top, 44px bottom)
 const CONTENT_W = PG_W - 112;
 const CONTENT_H = PG_H - 92;
@@ -628,11 +660,11 @@ function paginateHTML(htmlString, chapterLabel, sectionTitle) {
   if (pageHTML) flush();
   document.body.removeChild(ruler);
 
-  return pages.map(pg => {
+return pages.map(pg => {
     const hdr = pg.isFirst ? `
       <div class="fb-page-chapter-label">${escHtml(chapterLabel)}</div>
       <div class="fb-section-title">${escHtml(sectionTitle)}</div>` : '';
-    return hdr + pg.html;
+    return `<div class="fb-book-content">${hdr}${pg.html}</div>`;
   });
 }
 
@@ -692,6 +724,11 @@ window._openBookFlipbookViewer = async function (topics, startTopicIndex, bookNa
     if (idx > 0) _startPageIdx = idx;
   }
 
+if (!window.St || !window.St.PageFlip) {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js';
+    await new Promise(res => { s.onload = res; document.head.appendChild(s); });
+  }
   await _initBookFlip();
 };
 
@@ -724,8 +761,7 @@ async function _initBookFlip() {
     bkEl.appendChild(div);
   });
 
-  siwindow.__fbPageItems = pageItems; // expose for backward-flip pre-render
-  sizeViewport();zeViewport();
+sizeViewport();
 
   const pf = new St.PageFlip(bkEl, {
     width:              PG_W,
@@ -733,14 +769,14 @@ async function _initBookFlip() {
     size:               'fixed',
     showCover:          true,
     drawShadow:         true,
-    maxShadowOpacity:   0.5,
+    maxShadowOpacity:   0.35,
     flippingTime:       550,
     usePortrait:        !isDouble,
     startPage:          0,
     swipeDistance:      30,
     useMouseEvents:     true,
-    showPageCorners:    true,
-    disableFlipByClick: false,
+showPageCorners:    false,
+    disableFlipByClick: true,
     autoSize:           false,
   });
 

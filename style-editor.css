@@ -361,11 +361,13 @@ line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
-  border-top: 1px solid rgba(200,185,160,0.25);
-  background: rgba(245,240,232,0.97);
+  padding: 10px 24px;
+  border-top: 1px solid rgba(200,185,160,0.3);
+  background: rgba(245,240,232,0.98);
   border-radius: 0;
   flex-shrink: 0;
+  min-height: 52px;
+  gap: 12px;
 }
 
 /* Page leaves */
@@ -376,7 +378,9 @@ line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 }
 .fb-page:nth-child(odd)  { background: linear-gradient(to right, #fffdf8 93%, #ede9e0 100%); }
 .fb-page:nth-child(even) { background: linear-gradient(to left,  #fffdf8 93%, #ede9e0 100%); }
-
+/* Ensure the stf__item wrapper (StPageFlip's internal wrapper) is always opaque */
+.stf__item { background: #fffdf8 !important; }
+.stf__block { background: transparent; }
 /* Inline bar controls */
 .fb-layout-btn {
   background: transparent;
@@ -641,4 +645,41 @@ body.hl-active-mode #fbZoomViewport { cursor: crosshair !important; }
   color: #5a3e1a; margin: 0 0 0.5em;
   padding-bottom: 4px;
   border-bottom: 1px solid rgba(180,140,80,0.25);
+}
+/* Book page content wrapper — enforces A4 padding and typography */
+.fb-book-content {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  padding: 48px 56px 44px 56px;
+  box-sizing: border-box;
+  font-family: var(--font, 'Merriweather', Georgia, serif);
+  font-size: 14px;
+  line-height: 1.85;
+  color: #1e1808;
+  overflow: hidden;
+}
+
+.fb-book-content h1,
+.fb-book-content h2,
+.fb-book-content h3 {
+  font-family: 'Cormorant Garamond', 'Lora', Georgia, serif;
+  color: #2c1f0e;
+  margin-top: 0;
+}
+
+.fb-book-content p {
+  margin: 0 0 0.9em 0;
+}
+
+/* Zoom scroll spacer — used by applyZoom to expand scroll area without reflowing */
+.fb-zoom-spacer {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Ensure #fbZoomViewport is position:relative so spacer is positioned correctly */
+#fbZoomViewport {
+  position: relative;
 }
