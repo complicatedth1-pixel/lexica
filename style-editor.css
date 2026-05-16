@@ -105,8 +105,113 @@
 /* When PDF normal scroll mode is active, let pages stretch wider */
 .doc-area.pdf-scroll-mode { align-items: center; padding: 24px 0; }
 .doc-area.pdf-scroll-mode .page-card { width: 100%; max-width: 100%; padding: 0; background: transparent; box-shadow: none; border-radius: 0; }
+/* ── NORMAL EDITOR PAGE CARD — Word-like A4 document view ── */
+.page-card {
+  width: 100%;
+  max-width: 820px;
+  min-height: calc(100vh - 96px);
+  background: #fffdf8;
+  border-radius: 3px;
+  box-shadow:
+    0 1px 3px rgba(0,0,0,0.10),
+    0 4px 16px rgba(0,0,0,0.08),
+    0 0 0 1px rgba(120,100,60,0.07);
+  padding: 64px 80px 80px;
+  margin: 0 auto 40px;
+  position: relative;
+  color: #1e1808;
+  /* subtle page texture */
+  background-image:
+    linear-gradient(rgba(200,185,160,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200,185,160,0.03) 1px, transparent 1px);
+  background-size: 100% 1.9em, 100% 1.9em;
+}
+
+/* Override for when the flipbook is active */
+.page-card.fb-active {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  background-image: none;
+  min-height: unset;
+}
+
+/* The section editor itself needs document typography */
+.section-editor {
+  font-size: 15px !important;
+  line-height: 1.9 !important;
+  color: #1e1808 !important;
+}
+
+/* Nicer section blocks inside the page card */
+.page-card .section-block {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  margin-bottom: 0;
+  border-bottom: 1px solid rgba(200,185,160,0.18);
+}
+.page-card .section-block:last-child {
+  border-bottom: none;
+}
+.page-card .section-header {
+  background: transparent;
+  padding: 16px 0 8px;
+  border-bottom: 1px solid rgba(200,185,160,0.15);
+}
+.page-card .section-title-label {
+  font-family: 'Cormorant Garamond', 'Lora', Georgia, serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #2c1f0e;
+  letter-spacing: 0.01em;
+}
+.page-card .section-body {
+  padding: 0;
+}
+.page-card .section-editor {
+  padding: 14px 0 20px;
+  min-height: 120px;
+}
+
+/* Page title bar — more document-like */
+#pageTitleBar {
+  border-bottom: 1px solid rgba(180,160,120,0.2);
+  padding-bottom: 16px;
+  margin-bottom: 28px !important;
+}
+#pageTopicLabel {
+  font-family: sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #c09060;
+  margin-bottom: 4px;
+}
+#pageChapterLabel {
+  font-family: 'Lora', Georgia, serif;
+  font-size: 1.55rem;
+  font-weight: 400;
+  color: #2c1f0e;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+#pageProgress {
+  font-family: sans-serif;
+  font-size: 10px;
+  color: #a09070;
+  margin-top: 5px;
+  letter-spacing: 0.08em;
+}
+
+/* doc-area background should complement white pages */
+.doc-area {
+  background: #e8e4da; /* warm parchment background behind pages */
+}
 .page-card.fb-active { padding: 0; display: flex; flex-direction: column; }
 .editor { font-family: var(--font); font-size: var(--font-size); line-height: var(--line-height); color: inherit; outline: none; min-height: 360px; max-width: var(--text-width); margin: 0 auto; caret-color: #7a5c2a; }
+
 .editor p { margin-bottom: 1.5em; }
 .editor h2 { font-size: 1.1rem; font-weight: 700; font-style: italic; margin: 2em 0 0.8em; opacity: 0.65; }
 .editor a { color: inherit; text-underline-offset: 3px; opacity: 0.65; }
@@ -366,18 +471,192 @@ line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   background: rgba(245,240,232,0.98);
   border-radius: 0;
   flex-shrink: 0;
-  min-height: 52px;
-  gap: 12px;
+  min-height: 54px;
+  gap: 16px;
 }
 
-/* Page leaves */
+/* Page leaves — styled like the enhanced HTML reference */
 .fb-page {
-  background: #fff;
+  background: #fff8f0;
   overflow: hidden;
   position: relative;
 }
-.fb-page:nth-child(odd)  { background: linear-gradient(to right, #fffdf8 93%, #ede9e0 100%); }
-.fb-page:nth-child(even) { background: linear-gradient(to left,  #fffdf8 93%, #ede9e0 100%); }
+/* Paper texture overlay on each page */
+.fb-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  opacity: 0.6;
+  z-index: 0;
+}
+.fb-page > * { position: relative; z-index: 1; }
+.fb-page:nth-child(odd)  { background: linear-gradient(to right, #fffdf8 92%, #ede9e0 100%); }
+.fb-page:nth-child(even) { background: linear-gradient(to left,  #fffdf8 92%, #ede9e0 100%); }
+
+/* Hard cover pages (first and last) */
+.fb-page[data-density="hard"],
+.fb-page.hard {
+  background: linear-gradient(135deg, #1c1008 0%, #2e1a09 60%, #3a2010 100%) !important;
+}
+.fb-page[data-density="hard"]::before,
+.fb-page.hard::before {
+  content: '';
+  position: absolute;
+  inset: 14px;
+  border: 1px solid rgba(201,168,76,0.35);
+  pointer-events: none;
+  z-index: 1;
+  background: none;
+  opacity: 1;
+}
+.fb-page[data-density="hard"]::after,
+.fb-page.hard::after {
+  content: '';
+  position: absolute;
+  inset: 21px;
+  border: 1px solid rgba(201,168,76,0.13);
+  pointer-events: none;
+  z-index: 1;
+}
+/* Book page content wrapper — full A4 padding and typography */
+.fb-book-content {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  padding: 52px 58px 48px 58px;
+  box-sizing: border-box;
+  font-family: 'Lora', 'Merriweather', Georgia, serif;
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: #1e1808;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.fb-book-content h1,
+.fb-book-content h2,
+.fb-book-content h3 {
+  font-family: 'Cormorant Garamond', 'Playfair Display', 'Lora', Georgia, serif;
+  color: #2c1f0e;
+  margin-top: 0;
+  margin-bottom: 0.5em;
+}
+.fb-book-content h3 { font-size: 1.1rem; }
+.fb-book-content p { margin: 0 0 0.85em 0; }
+.fb-book-content ul, .fb-book-content ol { margin-left: 1.4em; margin-bottom: 0.8em; }
+.fb-book-content li { margin-bottom: 0.3em; }
+.fb-book-content strong { color: #2c1f0e; }
+.fb-book-content a { color: #2255a4; text-underline-offset: 3px; }
+
+/* Chapter label inside flip page */
+.fb-page-chapter-label {
+  font-family: sans-serif;
+  font-size: 8.5px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #9b2335;
+  margin-bottom: 4px;
+}
+
+/* Section title inside flip page */
+.fb-section-title {
+  font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
+  font-size: 1.45rem;
+  line-height: 1.2;
+  color: #1e1808;
+  margin-bottom: 8px;
+  font-weight: 400;
+}
+
+/* Gold rule separator */
+.fb-gold-rule {
+  width: 36px;
+  height: 1px;
+  background: #b8933a;
+  margin-bottom: 14px;
+  flex-shrink: 0;
+}
+
+/* Page number at bottom */
+.fb-page-number {
+  position: absolute;
+  bottom: 22px;
+  font-family: 'Lora', serif;
+  font-size: 10px;
+  color: rgba(36,26,14,0.45);
+  letter-spacing: 0.1em;
+}
+.fb-book-page:nth-child(odd)  .fb-page-number { right: 30px; }
+.fb-book-page:nth-child(even) .fb-page-number { left:  30px; }
+
+/* Cover page for book flipbook */
+.fb-book-cover {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  gap: 12px;
+  padding: 40px;
+}
+.fb-book-cover-title {
+  font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
+  font-size: 2.4rem;
+  font-weight: 300;
+  color: #f0ddb8;
+  line-height: 1.15;
+}
+.fb-book-cover-rule {
+  width: 60px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,168,76,0.7), transparent);
+}
+.fb-book-cover-sub {
+  font-family: sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: rgba(201,168,76,0.45);
+}
+
+/* Spine shadow between pages */
+.stf__block::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 100%;
+  background: linear-gradient(
+    to right,
+    rgba(0,0,0,0)     0%,
+    rgba(0,0,0,0.10) 20%,
+    rgba(0,0,0,0.25) 45%,
+    rgba(0,0,0,0.32) 50%,
+    rgba(0,0,0,0.25) 55%,
+    rgba(0,0,0,0.10) 80%,
+    rgba(0,0,0,0)    100%
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Zoom spacer for scroll-area expansion */
+.fb-zoom-spacer {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+#fbZoomViewport {
+  position: relative;
+}
+/* Ensure stf wrapper is opaque (fixes transparent backwards flip) */
+.stf__item { background: #fffdf8 !important; }
 /* Ensure the stf__item wrapper (StPageFlip's internal wrapper) is always opaque */
 .stf__item { background: #fffdf8 !important; }
 .stf__block { background: transparent; }
