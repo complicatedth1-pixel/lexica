@@ -6,8 +6,42 @@
 
 'use strict';
 
+// ── Dynamic date helper ───────────────────────────────────────
+function getTodayString() {
+  const d = new Date();
+  const day = d.getDate();
+  const month = d.toLocaleString('en-IN', { month: 'long' });
+  const year = d.getFullYear();
+  return `${day} ${month} ${year}`;
+}
+
+function getCurrentEconomicYear() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = d.getMonth() + 1; // 1-indexed
+  // Economic year starts April. If Jan-Mar, economic year is prev-curr.
+  if (month >= 4) {
+    return `${year}-${String(year + 1).slice(2)}`;
+  } else {
+    return `${year - 1}-${String(year).slice(2)}`;
+  }
+}
+
 // ── Default instructions (Brain Builder) ─────────────────────
-const DEFAULT_INDEX_INSTRUCTIONS = `Tu mera UPSC learning partner hai. Tera kaam samjhana hai — ratta nahi. Treat me like someone smart jo sirf dots connect nahi kar pa raha. Blank slate nahi hoon.
+function buildDefaultIndexInstructions() {
+  const today = getTodayString();
+  const econYear = getCurrentEconomicYear();
+  const budgetYear = (() => {
+    // Budget is presented in Feb for the upcoming year.
+    // e.g. Feb 2026 → Budget 2026-27
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const budgetFY = m >= 4 ? y + 1 : y;
+    return `${budgetFY}-${String(budgetFY + 1).slice(2)}`;
+  })();
+
+  return `Tu mera UPSC learning partner hai. Tera kaam samjhana hai — ratta nahi. Treat me like someone smart jo sirf dots connect nahi kar pa raha. Blank slate nahi hoon.
 
 TEACHING FLOW (free to remix):
 - Definition se kabhi mat shuru kar. Kabhi bhi.
@@ -36,9 +70,9 @@ WHAT NOT TO DO:
 - Book ka text padhake mat ruk — woh outdated aur abstract hai.
 
 SOURCES & FACTS — NON-NEGOTIABLE:
-- Aaj ki date: 6 May 2026. Current economic year: 2026-27.
-- SIRF 2026 ke figures. Budget 2026-27 (Feb 2026 presented). Latest RBI/MoSPI/PIB data only.
-- Agar kuch yearly hai → latest year ka data chahiye. Agar current status puchh raha hoon → 2026 ki situation.
+- Aaj ki date: ${today}. Current economic year: ${econYear}.
+- SIRF latest figures. Budget ${budgetYear} (Feb ${new Date().getFullYear()} presented). Latest RBI/MoSPI/PIB data only.
+- Agar kuch yearly hai → latest year ka data chahiye. Agar current status puchh raha hoon → ${new Date().getFullYear()} ki situation.
 - Har fact ke saath source + link.
 - Outdated data STRICTLY banned. Vague generalisations banned.
 - Wrong facts afford nahi ho sakte — fact-check non-negotiable.
@@ -51,9 +85,65 @@ INPUT HANDLING:
 - Each heading/subheading ke saath likhna: "Dhyan de — [kya seekhne waale hain aur kyun relevant hai, UPSC + real life dono ke liye]"
 
 END OF EACH SESSION:
-Ek revision note banana — facts + concepts — jo itna tight ho ki main sirf usse dekh ke sab recall kar sakun. Poora topic cover ho. Kuch chhootna nahi chahiye.`;
+Ek revision note banana — facts + concepts — jo itna tight ho ki main sirf usse dekh ke sab recall kar sakun. Poora topic cover ho. Kuch chhootna nahi chahiye.
 
-const DEFAULT_PAGE_INSTRUCTIONS = `Tu mera UPSC learning partner hai. Tera kaam samjhana hai — ratta nahi. Treat me like someone smart jo sirf dots connect nahi kar pa raha. Blank slate nahi hoon.
+---
+
+TASK: Create a complete chapter structure with pages AND sections for the topic given.
+
+OUTPUT ONLY this HTML, no explanation, no markdown fences:
+
+<!DOCTYPE html>
+<html>
+<body>
+<div class="brain-index">
+  <h1>[EXACT CHAPTER NAME]</h1>
+
+  <div class="page" order="1">
+    <div class="page-title">BLOCK 1 — [PAGE TITLE IN CAPS]</div>
+    <div class="sections">
+      <div class="section" order="1.1">1.1 [Specific section title — punchy, Hinglish, UPSC-relevant]</div>
+      <div class="section" order="1.2">1.2 [Specific section title]</div>
+      <div class="section" order="1.3">1.3 [Specific section title]</div>
+    </div>
+  </div>
+
+  <div class="page" order="2">
+    <div class="page-title">BLOCK 2 — [PAGE TITLE IN CAPS]</div>
+    <div class="sections">
+      <div class="section" order="2.1">2.1 [Specific section title]</div>
+      <div class="section" order="2.2">2.2 [Specific section title]</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
+
+STRUCTURE RULES:
+- h1 = exact chapter name
+- Each .page = one learnable block/topic (aim for 8-12 pages per chapter)
+- page-title format: "BLOCK N — TITLE IN CAPS (optional subtitle)"
+- Each page must have a .sections div with 3-6 .section divs inside
+- Section titles must be specific and punchy — Hinglish preferred. Not "Introduction to X" but "X kyu exist karta hai — asli wajah"
+- order attribute on .page = integer (1, 2, 3...)
+- order attribute on .section = decimal matching page (page 2 → 2.1, 2.2, 2.3)
+- Last page should always be a Quick Revision block with bullet-point facts as section titles
+- No extra HTML outside the .brain-index div. No styles. No scripts.`;
+}
+
+function buildDefaultPageInstructions() {
+  const today = getTodayString();
+  const econYear = getCurrentEconomicYear();
+  const budgetYear = (() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const budgetFY = m >= 4 ? y + 1 : y;
+    return `${budgetFY}-${String(budgetFY + 1).slice(2)}`;
+  })();
+
+  return `Tu mera UPSC learning partner hai. Tera kaam samjhana hai — ratta nahi. Treat me like someone smart jo sirf dots connect nahi kar pa raha. Blank slate nahi hoon.
 
 TEACHING FLOW (free to remix):
 - Definition se kabhi mat shuru kar. Kabhi bhi.
@@ -82,10 +172,10 @@ WHAT NOT TO DO:
 - Book ka text padhake mat ruk — woh outdated aur abstract hai.
 
 SOURCES & FACTS — NON-NEGOTIABLE:
-- Aaj ki date: 6 May 2026. Current economic year: 2026-27.
-- SIRF 2026 ke figures. Budget 2026-27 (Feb 2026 presented). Latest RBI/MoSPI/PIB data only.
-- Agar kuch yearly hai → latest year ka data chahiye. Agar current status puchh raha hoon → 2026 ki situation.
-- Har fact ke saath source + link.
+- Aaj ki date: ${today}. Current economic year: ${econYear}.
+- SIRF latest figures. Budget ${budgetYear} (Feb ${new Date().getFullYear()} presented). Latest RBI/MoSPI/PIB data only.
+- Agar kuch yearly hai → latest year ka data chahiye. Agar current status puchh raha hoon → ${new Date().getFullYear()} ki situation.
+- Har fact ke saath source + link as <a href="url" target="_blank">Source Name</a>.
 - Outdated data STRICTLY banned. Vague generalisations banned.
 - Wrong facts afford nahi ho sakte — fact-check non-negotiable.
 - Reality se link bina koi figure/concept meaningless hai — hamesha realistic reasoning de.
@@ -94,10 +184,72 @@ INPUT HANDLING:
 - Agar topic dun → tu decide kar kya UPSC-relevant hai, waise padha.
 - Agar book text dun → digest kar, phir open sources se teach kar.
 - Gaps fix kar khud — smooth learning ke liye jo missing ho woh bharo.
-- Each heading/subheading ke saath likhna: "Dhyan de — [kya seekhne waale hain aur kyun relevant hai, UPSC + real life dono ke liye]"
 
-END OF EACH SESSION:
-Ek revision note banana — facts + concepts — jo itna tight ho ki main sirf usse dekh ke sab recall kar sakun. Poora topic cover ho. Kuch chhootna nahi chahiye.`;
+---
+
+TASK: Write structured lesson content for the page and sections listed in the prompt.
+
+OUTPUT ONLY this HTML — no preamble, no explanation, no markdown fences, nothing outside the div:
+
+<!DOCTYPE html>
+<html>
+<body>
+<div class="lesson-content" data-page="[EXACT PAGE TITLE]">
+
+  <!-- SECTION N.N -->
+  <div class="lesson-section" data-title="[EXACT SECTION TITLE — character-for-character match]">
+    <h3>[Section title rephrased as a heading]</h3>
+
+    <p>[Opening — set the problem/need first, never a definition. 2-4 sentences.]</p>
+
+    <ul>
+      <li><strong>[Key point]</strong> — [explanation, grounded in reality]</li>
+      <li><strong>[Key point]</strong> — [explanation] <a href="[url]" target="_blank">[Source Name]</a></li>
+    </ul>
+
+    <blockquote>[One sharp insight — the thing to remember about this section. Not a quote, a distilled truth.]</blockquote>
+
+    <div class="revision-box">
+      <h4>Revision — [Section Short Title]</h4>
+      <ul>
+        <li><strong>[Term/Concept]:</strong> [tight fact or definition] — <a href="[url]" target="_blank">[Source]</a></li>
+        <li><strong>[Term/Concept]:</strong> [tight fact or definition]</li>
+        <li><strong>UPSC Angle:</strong> [what examiner expects / common trap / keyword to use]</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Repeat for each section -->
+
+  <!-- MASTER REVISION — always last, always present -->
+  <div class="revision-box" style="margin-top: 32px; background: var(--bg3);">
+    <h4>BLOCK [N] COMPLETE REVISION — [PAGE TITLE IN CAPS]</h4>
+    <ul>
+      <li><strong>[Key fact/concept]:</strong> [tight recall point] — <a href="[url]" target="_blank">[Source]</a></li>
+      <li><strong>[Key fact/concept]:</strong> [tight recall point]</li>
+      <li><strong>UPSC Keyword:</strong> [exact term/phrase to use in answers]</li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>
+
+CRITICAL OUTPUT RULES:
+1. data-title on each .lesson-section must be character-for-character identical to the section title as listed in the prompt. Do not paraphrase, do not reorder words.
+2. One .lesson-section per section listed — no more, no less.
+3. Every section MUST end with a <div class="revision-box"> — tight bullet facts, sources linked, UPSC angle noted.
+4. Page MUST end with a master <div class="revision-box" style="margin-top: 32px; background: var(--bg3);"> covering ALL sections of the page.
+5. Use <h3> for sub-headings, <p> for paragraphs, <ul>/<ol> for lists, <blockquote> for key insights.
+6. 150-400 words of actual teaching content per section (not counting revision box).
+7. Every factual claim needs a clickable <a href="url" target="_blank">Source</a> inline.
+8. No inline styles except on the master revision-box. No <style> tags. No <script> tags.
+9. Output nothing outside the <div class="lesson-content"> — no extra HTML, no comments outside section markers.`;
+}
+
+// ── Getters (called fresh each time so date is always current) ─
+function getDefaultIndexInstructions() { return buildDefaultIndexInstructions(); }
+function getDefaultPageInstructions()  { return buildDefaultPageInstructions(); }
 
 // ── Module state ──────────────────────────────────────────────
 const _ps = {
@@ -168,11 +320,13 @@ window.promptSettings = {
   async init() { await loadFromDB(); },
 
   getInstructions(type) {
-    const presets = type === 'index' ? _ps.indexPresets : _ps.pagePresets;
+    const presets  = type === 'index' ? _ps.indexPresets : _ps.pagePresets;
     const activeId = type === 'index' ? _ps.activeIndexId : _ps.activePageId;
-    if (!activeId) return type === 'index' ? DEFAULT_INDEX_INSTRUCTIONS : DEFAULT_PAGE_INSTRUCTIONS;
+    // Always call builder fresh → date is always today
+    const defaultInstr = type === 'index' ? getDefaultIndexInstructions() : getDefaultPageInstructions();
+    if (!activeId) return defaultInstr;
     const found = presets.find(p => p.id === activeId);
-    return found ? found.instructions : (type === 'index' ? DEFAULT_INDEX_INSTRUCTIONS : DEFAULT_PAGE_INSTRUCTIONS);
+    return found ? found.instructions : defaultInstr;
   },
 
   // Opens the preset manager modal for a given type
@@ -186,11 +340,10 @@ function _renderPresetManager(type) {
   const existing = document.getElementById('psManagerModal');
   if (existing) existing.remove();
 
-  const label = type === 'index' ? 'Index' : 'Page';
-  const presets = type === 'index' ? _ps.indexPresets : _ps.pagePresets;
+  const label    = type === 'index' ? 'Index' : 'Page';
+  const presets  = type === 'index' ? _ps.indexPresets : _ps.pagePresets;
   const activeId = type === 'index' ? _ps.activeIndexId : _ps.activePageId;
 
-  // Build dropdown options
   function buildOptions(selId) {
     let html = `<option value="__default__" ${!selId ? 'selected' : ''}>✦ Default (Brain Builder)</option>`;
     presets.forEach(p => {
@@ -254,48 +407,52 @@ function _renderPresetManager(type) {
   document.body.appendChild(modal);
 
   // ── Internal refs ────────────────────────────────────────────
-  const dropdown      = modal.querySelector('#psDropdown');
-  const newBtn        = modal.querySelector('#psNewBtn');
-  const deleteBtn     = modal.querySelector('#psDeleteBtn');
-  const activeBadge   = modal.querySelector('#psActiveBadge');
-  const nameRow       = modal.querySelector('#psNameRow');
-  const nameInput     = modal.querySelector('#psNameInput');
-  const instructTA    = modal.querySelector('#psInstructions');
-  const setActiveBtn  = modal.querySelector('#psSetActiveBtn');
-  const saveBtn       = modal.querySelector('#psSaveBtn');
-  const statusEl      = modal.querySelector('#psStatus');
-  const closeBtn      = modal.querySelector('#psClose');
+  const dropdown     = modal.querySelector('#psDropdown');
+  const newBtn       = modal.querySelector('#psNewBtn');
+  const deleteBtn    = modal.querySelector('#psDeleteBtn');
+  const activeBadge  = modal.querySelector('#psActiveBadge');
+  const nameRow      = modal.querySelector('#psNameRow');
+  const nameInput    = modal.querySelector('#psNameInput');
+  const instructTA   = modal.querySelector('#psInstructions');
+  const setActiveBtn = modal.querySelector('#psSetActiveBtn');
+  const saveBtn      = modal.querySelector('#psSaveBtn');
+  const statusEl     = modal.querySelector('#psStatus');
+  const closeBtn     = modal.querySelector('#psClose');
 
   const currentActiveId = () => type === 'index' ? _ps.activeIndexId : _ps.activePageId;
 
-  function setStatus(msg, color='#665f78') { statusEl.textContent = msg; statusEl.style.color = color; setTimeout(() => { statusEl.textContent = ''; }, 3000); }
+  function setStatus(msg, color = '#665f78') {
+    statusEl.textContent = msg;
+    statusEl.style.color = color;
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+  }
 
   function refreshUI(selId) {
     const isDefault = !selId || selId === '__default__';
     const isActive  = isDefault ? !currentActiveId() : selId === currentActiveId();
 
-    // instructions
     if (isDefault) {
-      instructTA.value    = type === 'index' ? DEFAULT_INDEX_INSTRUCTIONS : DEFAULT_PAGE_INSTRUCTIONS;
+      // Always regenerate default so date is current
+      instructTA.value    = type === 'index' ? getDefaultIndexInstructions() : getDefaultPageInstructions();
       instructTA.readOnly = true;
       instructTA.style.opacity = '0.5';
-      nameRow.style.display = 'none';
-      deleteBtn.style.display = 'none';
-      saveBtn.style.display = 'none';
+      nameRow.style.display    = 'none';
+      deleteBtn.style.display  = 'none';
+      saveBtn.style.display    = 'none';
     } else {
       const preset = presets.find(p => p.id === selId);
       if (!preset) return;
       instructTA.value    = preset.instructions;
       instructTA.readOnly = false;
       instructTA.style.opacity = '1';
-      nameInput.value = preset.name;
-      nameRow.style.display = 'flex';
-      deleteBtn.style.display = 'flex';
-      saveBtn.style.display = 'flex';
+      nameInput.value          = preset.name;
+      nameRow.style.display    = 'flex';
+      deleteBtn.style.display  = 'flex';
+      saveBtn.style.display    = 'flex';
     }
 
-    activeBadge.style.display = isActive ? 'block' : 'none';
-    setActiveBtn.style.display = isActive ? 'none' : 'flex';
+    activeBadge.style.display  = isActive ? 'block' : 'none';
+    setActiveBtn.style.display = isActive ? 'none'  : 'flex';
   }
 
   // Initial render
@@ -321,14 +478,13 @@ function _renderPresetManager(type) {
   saveBtn.addEventListener('click', async () => {
     const id = dropdown.value;
     if (id === '__default__') return;
-    const newName = nameInput.value.trim() || 'Untitled';
+    const newName  = nameInput.value.trim() || 'Untitled';
     const newInstr = instructTA.value.trim();
-    const preset = presets.find(p => p.id === id);
+    const preset   = presets.find(p => p.id === id);
     if (!preset) return;
-    preset.name = newName;
+    preset.name         = newName;
     preset.instructions = newInstr;
     await updatePreset(id, newName, newInstr);
-    // Refresh dropdown option label
     const opt = dropdown.querySelector(`option[value="${id}"]`);
     if (opt) opt.textContent = newName;
     setStatus('✓ Saved', '#90dba0');
@@ -336,25 +492,27 @@ function _renderPresetManager(type) {
 
   // ── New preset ───────────────────────────────────────────────
   newBtn.addEventListener('click', async () => {
-    newBtn.disabled = true;
+    newBtn.disabled    = true;
     newBtn.textContent = 'Creating…';
-    const defaultInstr = type === 'index' ? DEFAULT_INDEX_INSTRUCTIONS : DEFAULT_PAGE_INSTRUCTIONS;
+    const defaultInstr = type === 'index' ? getDefaultIndexInstructions() : getDefaultPageInstructions();
     const inserted = await insertPreset(type, 'New Preset', defaultInstr);
-    if (!inserted) { setStatus('Error creating preset', '#ff9090'); newBtn.disabled = false; newBtn.textContent = '+ New Preset'; return; }
+    if (!inserted) {
+      setStatus('Error creating preset', '#ff9090');
+      newBtn.disabled    = false;
+      newBtn.textContent = '+ New Preset';
+      return;
+    }
 
-    // Push to local state
     if (type === 'index') _ps.indexPresets.push(inserted);
     else _ps.pagePresets.push(inserted);
     presets.push(inserted);
 
-    // Set as active
     if (type === 'index') _ps.activeIndexId = inserted.id;
     else _ps.activePageId = inserted.id;
     await saveActiveToDB(type, inserted.id);
 
-    // Add to dropdown and select
     const opt = document.createElement('option');
-    opt.value = inserted.id;
+    opt.value       = inserted.id;
     opt.textContent = inserted.name;
     dropdown.appendChild(opt);
     dropdown.value = inserted.id;
@@ -362,7 +520,7 @@ function _renderPresetManager(type) {
     nameInput.focus();
     nameInput.select();
 
-    newBtn.disabled = false;
+    newBtn.disabled    = false;
     newBtn.textContent = '+ New Preset';
     setStatus('✓ New preset created and set as active', '#90dba0');
   });
@@ -376,20 +534,17 @@ function _renderPresetManager(type) {
 
     await deletePresetFromDB(id);
 
-    // Remove from local state
     const arr = type === 'index' ? _ps.indexPresets : _ps.pagePresets;
     const idx = arr.findIndex(p => p.id === id);
     if (idx !== -1) arr.splice(idx, 1);
     presets.splice(presets.findIndex(p => p.id === id), 1);
 
-    // If deleted was active, fall back to default
     if (currentActiveId() === id) {
       if (type === 'index') _ps.activeIndexId = null;
       else _ps.activePageId = null;
       await saveActiveToDB(type, null);
     }
 
-    // Remove from dropdown, select default
     const opt = dropdown.querySelector(`option[value="${id}"]`);
     if (opt) opt.remove();
     dropdown.value = '__default__';
@@ -402,7 +557,11 @@ function _renderPresetManager(type) {
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 }
 
-// ── escHtml helper (may not be loaded yet, safe fallback) ─────
+// ── escHtml helper ────────────────────────────────────────────
 function escHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
