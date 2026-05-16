@@ -452,5 +452,248 @@ window._closeFlipbookViewer = function (skipHomeClick) {
     if (hl) hl.click();
   }
 };
+// ═══════════════════════════════════════════════════════════════════════
+// BOOK FLIPBOOK VIEWER  — paginated reader for created books
+// Paginates section HTML into fixed page-sized divs, then opens them
+// in the same StPageFlip shell used by the PDF flipbook viewer.
+// ═══════════════════════════════════════════════════════════════════════
 
+(function () {
+'use strict';
+
+// Page dimensions (must match StPageFlip init in the PDF viewer above)
+const BK_PG_W = 550;
+const BK_PG_H = 700;
+// Usable content area inside page padding (px, approximate)
+const CONTENT_W = BK_PG_W - 104; // 52px padding each side
+const CONTENT_H = BK_PG_H - 96;  // 52px top + 44px bottom
+
+// ── Pagination engine ──────────────────────────────────────────────────────
+// Renders content into an offscreen page, measures actual height used,
+// splits at overflow boundaries. Returns array of HTML strings (one per page).
+function paginateHTML(htmlString, chapterLabel, sectionTitle) {
+  const pages = [];
+
+  // Offscreen measurement container
+  const ruler = document.createElement('div');
+  ruler.style.cssText = `
+    position: absolute; top: -9999px; left: -9999px;
+    width: ${CONTENT_W}px;
+    font-family: var(--font, 'Merriweather', Georgia, serif);
+    font-size: 14px; line-height: 1.85; color: #1e1808;
+    visibility: hidden; pointer-events: none;
+  `;
+  document.body.appendChild(ruler);
+
+  // Parse the HTML into block-level elements (p, h3, ul, ol, blockquote, div)
+  const tmp = document.createElement('div');
+  tmp.innerHTML = htmlString;
+
+  // Flatten into top-level child nodes
+  const nodes = Array.from(tmp.childNodes).filter(n =>
+    n.nodeType === Node.ELEMENT_NODE ||
+    (n.nodeType === Node.TEXT_NODE && n.textContent.trim())
+  );
+
+  let currentPageHTML = '';
+  let currentHeight   = 0;
+  let isFirstPage     = true;
+
+  // Reserve height for the header labels on first page
+  const headerReserve = isFirstPage ? 52 : 0; // chapter label + section title
+
+  function flushPage() {
+    pages.push({ html: currentPageHTML, isFirst: isFirstPage });
+    currentPageHTML = '';
+    currentHeight   = 0;
+    isFirstPage     = false;
+  }
+
+  for (const node of nodes) {
+    ruler.innerHTML = node.outerHTML || node.textContent;
+    const nodeH = ruler.getBoundingClientRect().height || ruler.offsetHeight;
+    const reserve = isFirstPage ? headerReserve : 0;
+    const available = CONTENT_H - reserve;
+
+    if (currentHeight + nodeH > available && currentPageHTML) {
+      // Doesn't fit — flush current page first
+      flushPage();
+    }
+
+    currentPageHTML += (node.outerHTML || node.textContent);
+    currentHeight   += nodeH;
+  }
+
+  if (currentPageHTML) flushPage();
+  document.body.removeChild(ruler);
+
+  // Build final page HTML strings with decorations
+  return pages.map((pg, i) => {
+    const header = pg.isFirst ? `
+      <div class="fb-page-chapter-label">${escHtml(chapterLabel)}</div>
+      <div class="fb-section-title">${escHtml(sectionTitle)}</div>
+    ` : '';
+    return header + pg.html;
+  });
+}
+
+// ── Build all pages from all topics ───────────────────────────────────────
+function buildBookPages(topics, bookName) {
+  // Returns array of { html, topicId, topicName }
+  const allPages = [];
+
+  // Cover page
+  allPages.push({
+    html: `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;gap:12px;">
+      <div style="font-family:'Cormorant Garamond',serif;font-size:2.2rem;font-weight:300;color:#3a2c1a;line-height:1.2;">${escHtml(bookName)}</div>
+      <div style="width:40px;height:1px;background:rgba(120,80,30,0.3);"></div>
+      <div style="font-family:sans-serif;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:rgba(120,80,30,0.45);">Lexica</div>
+    </div>`,
+    topicId: '__cover__', topicName: ''
+  });
+
+  for (const tp of topics) {
+    for (const sec of (tp.sections || [])) {
+      if (!sec.content || !sec.content.trim()) continue;
+      const label = tp.chapterName ? `${tp.chapterName} — ${tp.name}` : tp.name;
+      const pageHTMLs = paginateHTML(sec.content, label, sec.title || '');
+      pageHTMLs.forEach(html => {
+        allPages.push({ html, topicId: tp.id, topicName: tp.name });
+      });
+    }
+  }
+
+  // Back cover
+  allPages.push({
+    html: `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;gap:8px;">
+      <div style="font-family:sans-serif;font-size:9px;letter-spacing:0.22em;text-transform:uppercase;color:rgba(120,80,30,0.35);">End</div>
+    </div>`,
+    topicId: '__back__', topicName: ''
+  });
+
+  return allPages;
+}
+
+// ── Open the book in the flipbook shell ───────────────────────────────────
+window._openBookFlipbookViewer = async function (topics, startTopicIndex, bookName) {
+  // Ensure the shell exists (built by the PDF flipbook code above)
+  ensureShell();
+
+  const shell  = document.getElementById('flipbookShell');
+  const footer = document.getElementById('fbFooter');
+  shell.classList.add('fb-visible');
+  footer.classList.add('fb-visible');
+  document.getElementById('fbBookTitle').textContent = bookName || '';
+  document.getElementById('fbZoomSelect').value = '1';
+
+  // Layout pref (reuse same preference as PDF viewer)
+  await loadLayoutPref();
+
+  // Remove PDF layout toggle (books always use loaded pref, toggle still works)
+  const togEl = document.getElementById('pdfLayoutToggle');
+  if (togEl) togEl.remove();
+  injectLayoutToggle();
+
+  // Build paginated content
+  const allPages = buildBookPages(topics, bookName);
+
+  // Destroy any previous pageFlip instance
+  const bkEl = bookEl();
+  bkEl.innerHTML = '';
+  if (typeof _pageFlip !== 'undefined' && _pageFlip) {
+    try { _pageFlip.destroy(); } catch (e) {} 
+  }
+
+  const isDouble = _pdfLayout === 'double';
+
+  // Create page divs
+  allPages.forEach((pg, i) => {
+    const div = document.createElement('div');
+    div.className = 'fb-page fb-book-page';
+    div.style.cssText = `width:${BK_PG_W}px;height:${BK_PG_H}px;`;
+    div.innerHTML = pg.html;
+    // Page number (skip cover / back)
+    if (pg.topicId !== '__cover__' && pg.topicId !== '__back__') {
+      const pn = document.createElement('div');
+      pn.className = 'fb-page-number';
+      pn.textContent = i; // page number (cover = 0)
+      div.appendChild(pn);
+    }
+    bkEl.appendChild(div);
+  });
+
+  sizeViewport();
+
+  // Re-init StPageFlip for book mode
+  const pf = new St.PageFlip(bkEl, {
+    width:  BK_PG_W,
+    height: BK_PG_H,
+    size:   'fixed',
+    showCover:          true,
+    drawShadow:         true,
+    maxShadowOpacity:   0.65,
+    flippingTime:       650,
+    usePortrait:        !isDouble,
+    startPage:          0,
+    swipeDistance:      40,
+    useMouseEvents:     true,
+    showPageCorners:    true,
+    disableFlipByClick: false,
+  });
+
+  // Store reference in the outer closure variable so zoom/lock controls work
+  // We overwrite the module-level _pageFlip via the exposed setter
+  if (window._fbSetPageFlip) window._fbSetPageFlip(pf);
+
+  pf.loadFromHTML(Array.from(bkEl.querySelectorAll('.fb-page')));
+
+  // Jump to the first page of the requested topic
+  const startTopicId = topics[startTopicIndex]?.id;
+  let startPageIdx = 0;
+  if (startTopicId) {
+    const idx = allPages.findIndex(p => p.topicId === startTopicId);
+    if (idx > 0) startPageIdx = idx;
+  }
+  if (startPageIdx > 0) {
+    setTimeout(() => { try { pf.turnToPage(startPageIdx); } catch(e){} }, 120);
+  }
+
+  pf.on('flip',        () => updateBkUI(pf, allPages));
+  pf.on('changeState', () => updateFlipLock());
+
+  updateBkUI(pf, allPages);
+  applyZoom(false);
+};
+
+function updateBkUI(pf, allPages) {
+  if (!pf) return;
+  const cur  = pf.getCurrentPageIndex();
+  const tot  = allPages.length;
+  const pg   = allPages[cur];
+  document.getElementById('fbPageInfoTop').textContent =
+    pg && pg.topicName ? pg.topicName : (cur === 0 ? bookNameLabel() : '');
+  const spreads = _pdfLayout === 'double' ? Math.ceil(tot / 2) : tot;
+  const spread  = _pdfLayout === 'double' ? Math.floor(cur / 2) + 1 : cur + 1;
+  document.getElementById('fbPageInd').textContent = spread + ' / ' + spreads;
+  document.getElementById('fbPrevBtn').disabled = cur <= 0;
+  document.getElementById('fbNextBtn').disabled = cur >= tot - 1;
+}
+
+function bookNameLabel() {
+  return document.getElementById('fbBookTitle')?.textContent || '';
+}
+
+// ── Expose a setter so the book viewer can update the module-level _pageFlip
+// that the zoom / lock controls reference. Add this at module level in flipbook.js.
+// (We expose it here since it's in the same file — the IIFE closure shares scope.)
+window._fbSetPageFlip = function(pf) {
+  // This reaches into the outer IIFE's _pageFlip variable via the global setter
+  // We re-bind the footer buttons to the new instance
+  const prev = document.getElementById('fbPrevBtn');
+  const next = document.getElementById('fbNextBtn');
+  if (prev) prev.onclick = () => pf.flipPrev();
+  if (next) next.onclick = () => pf.flipNext();
+};
+
+})();
 })();

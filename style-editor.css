@@ -395,3 +395,78 @@ body.hl-active-mode #fbZoomViewport { cursor: crosshair !important; }
   background: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.13) 20%, rgba(0,0,0,0.28) 45%, rgba(0,0,0,0.35) 50%, rgba(0,0,0,0.28) 55%, rgba(0,0,0,0.13) 80%, transparent 100%);
   pointer-events: none; z-index: 1;
 }
+/* ── BOOK READ MODE (flipbook for created books) ── */
+#btn-read-mode {
+  background: rgba(212,135,42,0.15);
+  border: 1px solid rgba(212,135,42,0.35);
+  color: #d4a060;
+  padding: 4px 12px; border-radius: 5px;
+  font-size: 10px; font-family: sans-serif;
+  font-weight: 600; letter-spacing: 0.08em;
+  cursor: pointer; transition: all 0.18s;
+  white-space: nowrap; flex-shrink: 0;
+}
+#btn-read-mode:hover { background: rgba(212,135,42,0.28); }
+#btn-read-mode.active {
+  background: rgba(212,135,42,0.35);
+  border-color: rgba(212,135,42,0.7);
+  color: #f0c070;
+}
+
+/* Book page appearance inside flipbook */
+.fb-book-page {
+  background: #fffdf8;
+  font-family: var(--font, 'Merriweather', Georgia, serif);
+  font-size: 14px;
+  line-height: 1.85;
+  color: #1e1808;
+  padding: 52px 52px 44px;
+  box-sizing: border-box;
+  overflow: hidden;
+  position: relative;
+}
+.fb-book-page:nth-child(odd) {
+  background: linear-gradient(to right, #fffdf8 94%, #f0ece0 100%);
+}
+.fb-book-page:nth-child(even) {
+  background: linear-gradient(to left, #fffdf8 94%, #f0ece0 100%);
+}
+.fb-book-page h3 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.1rem; font-weight: 600;
+  color: #3a2c1a; margin: 0 0 0.6em; line-height: 1.3;
+}
+.fb-book-page p { margin: 0 0 0.9em; }
+.fb-book-page ul, .fb-book-page ol { margin: 0 0 0.9em 1.4em; }
+.fb-book-page li { margin-bottom: 0.3em; }
+.fb-book-page blockquote {
+  border-left: 3px solid rgba(212,135,42,0.5);
+  margin: 0.8em 0; padding: 4px 12px;
+  color: #5a4a2c; font-style: italic;
+}
+.fb-book-page a { color: #7a5030; text-underline-offset: 3px; }
+
+/* Chapter/topic label at top of first page of a section */
+.fb-page-chapter-label {
+  font-family: sans-serif; font-size: 9px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: rgba(120,90,40,0.45); margin-bottom: 18px;
+}
+/* Page number at bottom */
+.fb-page-number {
+  position: absolute; bottom: 16px;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 11px; color: rgba(120,90,40,0.35);
+  letter-spacing: 0.1em;
+}
+.fb-book-page:nth-child(odd)  .fb-page-number { right: 28px; }
+.fb-book-page:nth-child(even) .fb-page-number { left: 28px; }
+
+/* Section title divider */
+.fb-section-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.05rem; font-weight: 600; font-style: italic;
+  color: #5a3e1a; margin: 0 0 0.5em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(180,140,80,0.25);
+}

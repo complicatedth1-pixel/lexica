@@ -601,6 +601,35 @@ function showToast(msg) {
   setTimeout(() => toast.classList.remove('visible'), 3000);
 }
 window.showToast = showToast;
+// ── Read Mode button ──────────────────────────────────
+document.getElementById('btn-read-mode').addEventListener('click', () => {
+  if (pdfMode) return; // don't trigger in PDF mode
+  const tp = getSelectedTopic();
+  const ch = getChapter(selectedChapterId);
+  if (!tp) { showToast('Select a topic first'); return; }
+  if (!tp.sections || tp.sections.every(s => !(s.content && s.content.trim()))) {
+    showToast('No content yet — write something first'); return;
+  }
+  // Collect ALL topics in this chapter for prev/next navigation across topics
+  const allTopics = ch ? ch.topics.map(t => ({
+    id: t.id,
+    name: t.name,
+    chapterName: ch.name,
+    sections: t.sections || []
+  })) : [{ id: tp.id, name: tp.name, chapterName: '', sections: tp.sections || [] }];
+  const startIndex = allTopics.findIndex(t => t.id === tp.id);
+  if (window._openBookFlipbookViewer) {
+    window._openBookFlipbookViewer(allTopics, startIndex >= 0 ? startIndex : 0, bookName);
+  }
+});
 
+// Hide read button in PDF mode
+const _origSetPDFTopbarVisible = setPDFTopbarVisible;
+window.setPDFTopbarVisible = function(show) {
+  _origSetPDFTopbarVisible(show);
+  const rb = document.getElementById('btn-read-mode');
+  if (rb) rb.style.display = show ? 'none' : '';
+};
 // ── Init ──────────────────────────────────────────────
+
 renderTree(); renderPage(); renderHomepage(); updateHL();
