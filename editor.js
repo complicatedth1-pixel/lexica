@@ -530,17 +530,20 @@ function setActiveHighlighter(type) {
   const hlP = document.getElementById('hl-p');
   const hlM = document.getElementById('hl-m');
   if (activeHlType === type) {
-    // Toggle off
     activeHlType = null;
     hlP.classList.remove('hl-active');
     hlM.classList.remove('hl-active');
+    document.body.classList.remove('hl-active-mode');
     showToast('Highlighter off');
   } else {
     activeHlType = type;
     hlP.classList.toggle('hl-active', type === 'p');
     hlM.classList.toggle('hl-active', type === 'm');
+    document.body.classList.add('hl-active-mode');
     showToast(type === 'p' ? '✦ Yellow highlighter on' : '✦ Green highlighter on');
   }
+  // Re-apply flip/zoom lock in flipbook if open
+  if (window._fbUpdateFlipLock) window._fbUpdateFlipLock();
 }
 
 document.getElementById('hl-p').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('p'); });

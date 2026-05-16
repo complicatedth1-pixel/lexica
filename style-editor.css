@@ -294,3 +294,103 @@
 }
 .pdf-hl-overlay.highlight-p { background: #ffe566; opacity: 0.5; }
 .pdf-hl-overlay.highlight-m { background: #7ddb7d; opacity: 0.5; }
+/* ── FLIPBOOK VIEWER ── */
+#flipbookShell {
+  position: fixed; inset: 0; z-index: 250;
+  background: #12100a;
+  background-image:
+    radial-gradient(ellipse 90% 60% at 50% 110%, rgba(100,65,20,0.45) 0%, transparent 65%),
+    radial-gradient(ellipse 70% 40% at 50% -10%, rgba(60,35,10,0.25) 0%, transparent 60%);
+  display: none; flex-direction: column; align-items: center;
+  font-family: 'Lora', serif;
+}
+#flipbookShell.fb-visible { display: flex; }
+
+#fbTopbar {
+  width: 100%; min-height: 48px;
+  background: rgba(15,13,20,0.97); backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex; align-items: center; padding: 4px 10px; gap: 6px 10px;
+  flex-shrink: 0; z-index: 20; overflow-x: auto; scrollbar-width: none;
+}
+#fbTopbar::-webkit-scrollbar { display: none; }
+
+#fbZoomViewport {
+  overflow: auto; scrollbar-width: none; -ms-overflow-style: none;
+  cursor: default; position: relative; flex-shrink: 0;
+}
+#fbZoomViewport::-webkit-scrollbar { display: none; }
+
+#fbZoomCanvas {
+  position: relative; display: flex;
+  align-items: flex-start; justify-content: flex-start;
+  transition: width 0.22s ease, height 0.22s ease;
+}
+
+#fbBook { transform-origin: top left; transition: transform 0.22s ease; flex-shrink: 0; }
+
+.fb-page {
+  background: #fff; overflow: hidden; position: relative;
+}
+.fb-page:nth-child(odd)  { background: linear-gradient(to right, #fff 92%, #e8e8e8 100%); }
+.fb-page:nth-child(even) { background: linear-gradient(to left,  #fff 92%, #e8e8e8 100%); }
+
+#fbFooter {
+  position: fixed; bottom: 0; left: 0; right: 0; height: 52px;
+  background: rgba(15,10,4,0.93); backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(201,168,76,0.15);
+  display: none; align-items: center; justify-content: center; gap: 0; z-index: 99999;
+}
+#fbFooter.fb-visible { display: flex; }
+
+.fb-footer-sec { display: flex; align-items: center; gap: 10px; padding: 0 16px; }
+.fb-footer-div { width: 1px; height: 22px; background: rgba(201,168,76,0.15); }
+
+.fb-ctrl-btn {
+  background: transparent; border: 1px solid rgba(201,168,76,0.32);
+  color: rgba(201,168,76,0.75); padding: 6px 18px;
+  font-family: 'Lora', serif; font-size: 0.68rem; letter-spacing: 0.22em;
+  text-transform: uppercase; cursor: pointer; border-radius: 2px; transition: all 0.18s;
+}
+.fb-ctrl-btn:hover:not(:disabled) { border-color: rgba(201,168,76,0.65); color: #c9a84c; background: rgba(201,168,76,0.08); }
+.fb-ctrl-btn:disabled { opacity: 0.25; cursor: default; }
+
+.fb-zoom-btn {
+  background: transparent; border: 1px solid rgba(201,168,76,0.28);
+  color: rgba(201,168,76,0.65); width: 28px; height: 28px;
+  font-size: 1rem; cursor: pointer; border-radius: 2px;
+  display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.18s;
+}
+.fb-zoom-btn:hover { border-color: rgba(201,168,76,0.6); color: #c9a84c; background: rgba(201,168,76,0.08); }
+
+.fb-page-ind {
+  font-family: 'Playfair Display', serif; color: rgba(201,168,76,0.4);
+  font-size: 0.72rem; letter-spacing: 0.14em; min-width: 62px; text-align: center;
+}
+.fb-zoom-ind {
+  font-family: 'Lora', serif; color: rgba(201,168,76,0.35);
+  font-size: 0.65rem; letter-spacing: 0.12em; min-width: 42px; text-align: center;
+}
+
+/* Page layout toggle in right panel */
+.pdf-layout-toggle {
+  display: flex; gap: 6px; padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 6px;
+}
+.pdf-layout-btn {
+  flex: 1; padding: 5px 0; border-radius: 4px; font-size: 10px;
+  font-family: sans-serif; cursor: pointer; border: 1px solid rgba(255,255,255,0.1);
+  background: transparent; color: #665f78; letter-spacing: 0.05em; transition: all 0.15s;
+}
+.pdf-layout-btn.active { background: rgba(212,135,42,0.18); border-color: rgba(212,135,42,0.4); color: #d4a060; }
+
+/* Highlight active → crosshair so selecting never triggers zoom */
+body.hl-active-mode #fbZoomViewport { cursor: crosshair !important; }
+
+/* Spine shadow overlay */
+.stf__block::after {
+  content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 40px; height: 100%;
+  background: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.13) 20%, rgba(0,0,0,0.28) 45%, rgba(0,0,0,0.35) 50%, rgba(0,0,0,0.28) 55%, rgba(0,0,0,0.13) 80%, transparent 100%);
+  pointer-events: none; z-index: 1;
+}

@@ -28,7 +28,7 @@ function setPDFTopbarVisible(show) {
 
 async function openPDFViewer(book) {
   pdfViewerBook = book; pdfMode = true; pdfCurrentPage = 1;
-  const homepage = document.getElementById('homepage');
+  const homepage    = document.getElementById('homepage');
   const editorShell = document.getElementById('editor-shell');
   homepage.classList.add('hidden'); editorShell.classList.add('visible');
   document.getElementById('sidebarBookTitle').textContent = book.name;
@@ -36,35 +36,30 @@ async function openPDFViewer(book) {
   document.getElementById('sectionsContainer').innerHTML = '';
   document.getElementById('editor').style.display = 'none';
   document.getElementById('pageTitleBar').style.display = 'none';
-  const pageCard = document.getElementById('pageCard');
-  pageCard.style.cssText = 'padding:0;border:none;background:transparent;box-shadow:none;backdrop-filter:none;border-radius:0;max-width:100%;width:100%;display:flex;flex-direction:column;align-items:center;';
-  let pdfArea = document.getElementById('pdfCanvasArea');
-  if (!pdfArea) {
-    pdfArea = document.createElement('div'); pdfArea.id = 'pdfCanvasArea';
-    pdfArea.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:20px;padding:24px 8px 60px;min-height:100%;width:100%;';
-    pageCard.appendChild(pdfArea);
-  }
-  pdfArea.innerHTML = '<div id="pdfLoadMsg" style="font-family:sans-serif;font-size:13px;color:#9a8a6a;padding:60px 24px;text-align:center;">Loading PDF…</div>';
-  document.getElementById('pdfZoomSelect').onchange = function() { if (!pdfViewerDoc) return; pdfViewerScale = parseFloat(this.value); renderAllPDFPagesInEditor(pdfViewerDoc, pdfViewerScale); };
-  document.getElementById('pdfCaptureBtn').onclick = capturePDFVisibleArea;
+  updatePDFHighlightSidebar();
+  swRunning = false; swStart = null; clearInterval(swTimer);
+  swStartStop.textContent = '▶'; swElapsed = 0; swDisplay.textContent = '00:00';
 
   loadPDFJS(async () => {
     try {
       let base64 = book.pdfBase64;
-      if (!base64) { document.getElementById('pdfLoadMsg').textContent = '⏳ Downloading from cloud…'; base64 = await loadPdfFromStorage(book.id); if (base64) book.pdfBase64 = base64; }
-      if (!base64) { document.getElementById('pdfLoadMsg').textContent = '❌ PDF not found. Please re-import.'; return; }
+      if (!base64) {
+        showToast('⏳ Downloading from cloud…');
+        base64 = await loadPdfFromStorage(book.id);
+        if (base64) book.pdfBase64 = base64;
+      }
+      if (!base64) { showToast('❌ PDF not found. Please re-import.'); return; }
       const binary = atob(base64); const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      window.pdfjsLib.getDocument({ data: bytes }).promise.then(pdf => {
-        pdfViewerDoc = pdf; pdfViewerScale = parseFloat(document.getElementById('pdfZoomSelect').value) || 1;
-        buildPDFOutlineSidebar(pdf).then(() => {
-          renderAllPDFPagesInEditor(pdf, pdfViewerScale);
-          swRunning = false; swStart = null; clearInterval(swTimer); swStartStop.textContent = '▶';
-          swElapsed = loadPDFPageTime(1); swDisplay.textContent = swFormat(swElapsed);
-          updatePDFHighlightSidebar();
-        });
-      }).catch(err => { document.getElementById('pdfLoadMsg').textContent = '❌ Error: ' + err.message; });
-    } catch(err) { document.getElementById('pdfLoadMsg').textContent = '❌ Error: ' + err.message; }
+      window.pdfjsLib.getDocument({ data: bytes }).promise.then(async pdf => {
+        pdfViewerDoc = pdf;
+        await buildPDFOutlineSidebar(pdf);
+        // Route to flipbook viewer
+        if (window._openFlipbookViewer) {
+          await window._openFlipbookViewer(book, pdf);
+        }
+      }).catch(err => showToast('❌ ' + err.message));
+    } catch(err) { showToast('❌ ' + err.message); }
   });
 }
 
@@ -351,6 +346,8 @@ document.getElementById('homeLink').addEventListener('click', () => {
   document.getElementById('editor').style.display = '';
   const pdfBtn = document.getElementById('pdfConfirmBtn');
   if (pdfBtn) pdfBtn.style.display = 'none';
+  // Close flipbook shell if open
+  if (window._closeFlipbookViewer) window._closeFlipbookViewer(true); // true = skip homeLink re-click
 }, true);
 
 window.openPDFViewer = openPDFViewer;
