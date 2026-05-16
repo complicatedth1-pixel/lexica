@@ -68,8 +68,8 @@ function ensureShell() {
   shell.innerHTML = `
     <div id="fbInlineBar">
       <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
-        <span id="fbModeLabel" style="font-size:10px;font-family:sans-serif;
-          letter-spacing:.1em;text-transform:uppercase;color:#665f78;white-space:nowrap;"></span>
+        <span id="fbModeLabel" style="font-size:10px;font-family:'Lora',serif;
+          letter-spacing:.2em;text-transform:uppercase;color:rgba(201,168,76,0.5);white-space:nowrap;"></span>
         <div class="topbar-sep" style="height:14px;"></div>
         <button class="fb-layout-btn" id="fbSinglePgBtn" title="Single page">☰</button>
         <button class="fb-layout-btn" id="fbDoublePgBtn" title="Double page">⬜⬜</button>
@@ -79,8 +79,8 @@ function ensureShell() {
         <button class="fb-zoom-btn" id="fbZoomInBtn">+</button>
         <button class="fb-inline-btn" id="fbZoomResetBtn">Reset</button>
         <div class="topbar-sep" style="height:14px;"></div>
-        <span id="fbPageInfoInline" style="font-size:10px;font-family:sans-serif;
-          color:#9a8a6a;white-space:nowrap;"></span>
+        <span id="fbPageInfoInline" style="font-size:10px;font-family:'Lora',serif;
+          color:rgba(201,168,76,0.35);white-space:nowrap;letter-spacing:0.08em;"></span>
       </div>
       <button class="fb-inline-btn fb-close-btn" id="fbCloseInline" title="Close flipbook view">✕ Close</button>
     </div>
@@ -620,15 +620,6 @@ const escHtml = window.escHtml || function(s) {
 };
 
 // A4 usable content area (padding 56px each side, 48px top, 44px bottom)
-
-// Local escHtml fallback in case library.js hasn't run yet
-const escHtml = window.escHtml || function(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-};
-
-// A4 usable content areastrict';
-
-// A4 usable content area (padding 56px each side, 48px top, 44px bottom)
 const CONTENT_W = PG_W - 112;
 const CONTENT_H = PG_H - 92;
 
@@ -705,7 +696,6 @@ function buildBookPages(topics, bookName) {
     }
   }
   // Back cover
-// Back cover
   all.push({
     html: `<div class="fb-book-cover">
       <div style="font-size:1.2rem;color:rgba(201,168,76,0.25);margin-bottom:18px;">✦</div>
@@ -861,7 +851,6 @@ function updateBkUI(pf) {
 
 })(); // end book IIFE
 
-// ── Shared setter for _pageFlip (must be at outer scope) ──────────────────
 // ── Shared setter for _pageFlip (must be at outer scope) ──────────────────
 window._fbSetPageFlip = function (pf) {
   _pageFlip = pf;
