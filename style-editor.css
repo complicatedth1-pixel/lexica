@@ -139,7 +139,8 @@
 .hl-card { border-radius: 6px; padding: 7px 10px; margin-bottom: 6px; }
 .hl-card-p { background: rgba(255,229,102,0.12); border: 1px solid rgba(255,200,0,0.2); }
 .hl-card-m { background: rgba(125,219,125,0.1); border: 1px solid rgba(80,200,80,0.18); }
-.hl-card-text { font-size: 11px; font-family: var(--font); line-height: 1.5; color: #c0b8d0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.hl-card-text { font-size: 11px; font-family: var(--font); line-height: 1.5; color: #c0b8d0; display: -webkit-box; -webkit-line-clamp: 3;
+line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .hl-card-badge { display: inline-block; font-size: 9px; font-family: sans-serif; font-weight: 700; letter-spacing: 0.08em; border-radius: 10px; padding: 1px 7px; margin-bottom: 5px; }
 .badge-p { background: #ffe566; color: #5a4200; }
 .badge-m { background: #7ddb7d; color: #1a3d1a; }
