@@ -102,7 +102,7 @@ function ensureShell() {
 
   // ── Events ────────────────────────────────────────────────────────────
   document.getElementById('fbCloseInline').addEventListener('click', () => window._closeFlipbookViewer && window._closeFlipbookViewer());
-  document.getElementById('fbPrevBtn').addEventListener('click', () => _pageFlip && _pageFlip.flipPrev());
+document.getElementById('fbPrevBtn').addEventListener('click', () => _pageFlip && _pageFlip.flipPrev());
   document.getElementById('fbNextBtn').addEventListener('click', () => _pageFlip && _pageFlip.flipNext());
   document.getElementById('fbZoomInBtn').addEventListener('click',  () => zoomTo(_scale + ZOOM_STEP, true));
   document.getElementById('fbZoomOutBtn').addEventListener('click', () => zoomTo(_scale - ZOOM_STEP, true));
@@ -172,8 +172,17 @@ function showShell() {
   if (editor)            editor.style.display = 'none';
   if (pageTitleBar)      pageTitleBar.style.display = 'none';
 
+  // The shell is fixed-position over the doc-area; hide doc-area scroll
+  const docArea = document.querySelector('.doc-area');
+  if (docArea) docArea.style.overflow = 'hidden';
+
   document.getElementById('fbInlineShell').style.display = 'flex';
-  // Move pageConfirmBtn above footer (80px from bottom instead of 28px)
+
+  // Ensure sidebar remains visible (it's at z-index:10, shell at z-index:90 — fine)
+  const sidebar = document.querySelector('.sidebar');
+  if (sidebar) sidebar.style.zIndex = '95'; // above shell so sidebar clicks work
+
+  // Move pageConfirmBtn above nav bar
   const confirmBtn = document.getElementById('pageConfirmBtn') || document.getElementById('pdfConfirmBtn');
   if (confirmBtn) confirmBtn.style.bottom = '80px';
 }
@@ -181,6 +190,15 @@ function showShell() {
 function hideShell() {
   const shell = document.getElementById('fbInlineShell');
   if (shell) shell.style.display = 'none';
+
+  // Restore doc-area scroll
+  const docArea = document.querySelector('.doc-area');
+  if (docArea) docArea.style.overflow = '';
+
+  // Restore sidebar z-index
+  const sidebar = document.querySelector('.sidebar');
+  if (sidebar) sidebar.style.zIndex = '';
+
   // Restore confirm btn position
   const confirmBtn = document.getElementById('pageConfirmBtn') || document.getElementById('pdfConfirmBtn');
   if (confirmBtn) confirmBtn.style.bottom = '28px';
@@ -430,29 +448,70 @@ async function initPdfFlipbook(pdf, book) {
   });
   _pageFlip.loadFromHTML(Array.from(bkEl.querySelectorAll('.fb-page')));
 
-  _pageFlip.on('flip',        () => { updateFbUI(); updateFlipLock(); });
-  _pageFlip.on('changeState', () => updateFlipLock());
-
+_pageFlip.on('changeState', (e) => {
+    updateFlipLock();
+    // When a flip is starting (user grabbed a corner), pre-render the revealed page
+    if (e && e.data === 'user_fold' && _doc && window.__fbPageItems) {
+      const cur = _pageFlip.getCurrentPageIndex();
+      const items = window.__fbPageItems;
+      // Pre-render ±4 pages around current position
+      for (let i = Math.max(0, cur - 4); i <= Math.min(items.length - 1, cur + 4); i++) {
+        const item = items[i];
+        if (item && item.el.dataset.rendered === 'false') {
+          item.el.dataset.rendered = 'true';
+          renderPdfPage(_doc, item.pageNum, item.canvas);
+        }
+      }
+    }
+  });
+  // flip handler + pre-render is set up in the preRenderAround block above
   updateFbUI();
   applyZoom(false);
 
   // Lazy render — use larger rootMargin so adjacent pages pre-render (fixes blank on flip)
+  // Pre-render first 6 pages immediately (covers double-page spread + 1 ahead)
+  const EAGER = Math.min(6, pageItems.length);
+  for (let i = 0; i < EAGER; i++) {
+    pageItems[i].el.dataset.rendered = 'true';
+    renderPdfPage(pdf, pageItems[i].pageNum, pageItems[i].canvas);
+  }
+
+  // For remaining pages, render in rolling batches triggered by flip events
+  // so the pages ahead of current position are always ready
+  function preRenderAround(currentIndex) {
+    const LOOK_AHEAD = 4;
+    const start = Math.max(EAGER, currentIndex - 1);
+    const end   = Math.min(pageItems.length - 1, currentIndex + LOOK_AHEAD);
+    for (let i = start; i <= end; i++) {
+      const item = pageItems[i];
+      if (item.el.dataset.rendered === 'false') {
+        item.el.dataset.rendered = 'true';
+        renderPdfPage(pdf, item.pageNum, item.canvas);
+      }
+    }
+  }
+
+  // Hook into flip events to pre-render upcoming pages
+  const origFlipHandler = () => { updateFbUI(); updateFlipLock(); };
+  _pageFlip.on('flip', () => {
+    origFlipHandler();
+    preRenderAround(_pageFlip.getCurrentPageIndex());
+  });
+  // Override the flip handler that was added just before (remove duplicate)
+  // Note: StPageFlip doesn't support removeListener so we replace after loading.
+
+  // Fallback observer for the rest
   const obs = new IntersectionObserver(entries => {
     entries.forEach(entry => {
       if (!entry.isIntersecting) return;
       const el = entry.target;
-      if (el.dataset.rendered === 'true') return;
+      if (el.dataset.rendered !== 'false') return;
       el.dataset.rendered = 'true';
       const item = pageItems.find(p => p.el === el);
       if (item) renderPdfPage(pdf, item.pageNum, item.canvas);
     });
-  }, { root: null, rootMargin: '1200px 0px', threshold: 0 });
-  // Pre-render first 4 pages immediately so flip works from page 1
-  for (let i = 0; i < Math.min(4, pageItems.length); i++) {
-    pageItems[i].el.dataset.rendered = 'true';
-    renderPdfPage(pdf, pageItems[i].pageNum, pageItems[i].canvas);
-  }
-  pageItems.slice(4).forEach(({ el }) => obs.observe(el));
+  }, { root: null, rootMargin: '2000px 0px', threshold: 0 });
+  pageItems.slice(EAGER).forEach(({ el }) => obs.observe(el));
 }
 
 // ── UI update (PDF mode) ──────────────────────────────────────────────────
@@ -665,7 +724,8 @@ async function _initBookFlip() {
     bkEl.appendChild(div);
   });
 
-  sizeViewport();
+  siwindow.__fbPageItems = pageItems; // expose for backward-flip pre-render
+  sizeViewport();zeViewport();
 
   const pf = new St.PageFlip(bkEl, {
     width:              PG_W,
@@ -736,12 +796,42 @@ function updateBkUI(pf) {
 })(); // end book IIFE
 
 // ── Shared setter for _pageFlip (must be at outer scope) ──────────────────
+// ── Shared setter for _pageFlip (must be at outer scope) ──────────────────
 window._fbSetPageFlip = function (pf) {
   _pageFlip = pf;
+
+  // Pre-render pages around target before flipping to prevent blank/blurry back face
+  function ensurePageRendered(index) {
+    if (!_doc || !window.__fbPageItems) return;
+    const items = window.__fbPageItems;
+    // Render a window of ±3 pages around the target
+    for (let i = Math.max(0, index - 3); i <= Math.min(items.length - 1, index + 3); i++) {
+      const item = items[i];
+      if (item && item.el.dataset.rendered === 'false') {
+        item.el.dataset.rendered = 'true';
+        renderPdfPage(_doc, item.pageNum, item.canvas);
+      }
+    }
+  }
+
   const prev = document.getElementById('fbPrevBtn');
   const next = document.getElementById('fbNextBtn');
-  if (prev) prev.onclick = () => pf.flipPrev();
-  if (next) next.onclick = () => pf.flipNext();
+  if (prev) {
+    prev.onclick = null;
+    prev.onclick = () => {
+      const cur = pf.getCurrentPageIndex();
+      ensurePageRendered(cur - 2); // back flip reveals cur-1 (or cur-2 in double)
+      pf.flipPrev();
+    };
+  }
+  if (next) {
+    next.onclick = null;
+    next.onclick = () => {
+      const cur = pf.getCurrentPageIndex();
+      ensurePageRendered(cur + 2);
+      pf.flipNext();
+    };
+  }
 };
 
 })(); // end outer IIFE

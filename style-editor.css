@@ -102,6 +102,9 @@
 .bg-layer { position: absolute; inset: 0; z-index: 0; background-color: #e8e0d2; background-image: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(140,120,90,0.04) 3px, rgba(140,120,90,0.04) 4px), repeating-linear-gradient(90deg, transparent, transparent 4px, rgba(140,120,90,0.03) 4px, rgba(140,120,90,0.03) 5px), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='250'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='5' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='250' height='250' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E"); background-size: auto, auto, 250px 250px; }
 .doc-area { flex: 1; overflow-y: auto; position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; padding: 24px 12px 24px; scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.1) transparent; -webkit-overflow-scrolling: touch; }
 
+/* When PDF normal scroll mode is active, let pages stretch wider */
+.doc-area.pdf-scroll-mode { align-items: center; padding: 24px 0; }
+.doc-area.pdf-scroll-mode .page-card { width: 100%; max-width: 100%; padding: 0; background: transparent; box-shadow: none; border-radius: 0; }
 .page-card.fb-active { padding: 0; display: flex; flex-direction: column; }
 .editor { font-family: var(--font); font-size: var(--font-size); line-height: var(--line-height); color: inherit; outline: none; min-height: 360px; max-width: var(--text-width); margin: 0 auto; caret-color: #7a5c2a; }
 .editor p { margin-bottom: 1.5em; }
@@ -299,13 +302,16 @@ line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 #fbInlineShell {
   display: none;
   flex-direction: column;
+  /* Break out of pageCard's padding and fill entire doc-area */
+  position: fixed;
+  /* sit just below the topbar (48px) and above nothing */
+  top: 48px;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
-  /* Height: fill the available doc-area. doc-area has padding-bottom:80px so we set
-     a min-height and let flex do the rest */
-  min-height: 600px;
-  height: calc(100vh - 140px); /* topbar(48) + some margin */
-  background: transparent;
-  position: relative;
+  z-index: 90; /* below topbar (z-index:200) but above doc-area */
+  background: #e8e4da;
 }
 
 #fbInlineBar {
@@ -314,8 +320,8 @@ line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   gap: 8px;
   padding: 6px 10px;
   border-bottom: 1px solid rgba(200,185,160,0.25);
-  background: rgba(255,252,245,0.6);
-  border-radius: 6px 6px 0 0;
+  background: rgba(245,240,232,0.97);
+  border-radius: 0;
   flex-shrink: 0;
   flex-wrap: wrap;
   row-gap: 4px;
@@ -327,10 +333,9 @@ line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: #f0ede4;
-  border-left: 1px solid rgba(200,185,160,0.3);
-  border-right: 1px solid rgba(200,185,160,0.3);
+  background: #e8e4da;
   min-height: 0;
+  /* no side borders — we're full-width now */
 }
 
 #fbZoomViewport {
@@ -358,8 +363,8 @@ line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   justify-content: space-between;
   padding: 8px 16px;
   border-top: 1px solid rgba(200,185,160,0.25);
-  background: rgba(255,252,245,0.6);
-  border-radius: 0 0 6px 6px;
+  background: rgba(245,240,232,0.97);
+  border-radius: 0;
   flex-shrink: 0;
 }
 

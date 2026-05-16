@@ -32,6 +32,9 @@ async function openPDFViewer(book) {
   const editorShell = document.getElementById('editor-shell');
   homepage.classList.add('hidden');
   editorShell.classList.add('visible');  // keep visible so sidebars work
+  // Signal doc-area to go full-width for PDF scroll mode
+  const docArea = document.querySelector('.doc-area');
+  if (docArea) docArea.classList.add('pdf-scroll-mode');
   document.getElementById('sidebarBookTitle').textContent = book.name;
   setPDFTopbarVisible(true);
   document.getElementById('sectionsContainer').innerHTML = '';
@@ -333,7 +336,8 @@ window.renderPDFConfirmBtn = renderPDFConfirmBtn;
 document.getElementById('homeLink').addEventListener('click', () => {
   if (!pdfMode) return;
   if (swRunning) savePDFPageTime();
-  pdfMode = false; pdfViewerDoc = null; pdfCurrentPage = null;
+  const docArea = document.querySelector('.doc-area');
+  if (docArea) docArea.classList.remove('pdf-scroll-mode'); pdfViewerDoc = null; pdfCurrentPage = null;
   setPDFTopbarVisible(false);
   const pageCard = document.getElementById('pageCard'); pageCard.removeAttribute('style');
   const pdfArea = document.getElementById('pdfCanvasArea'); if (pdfArea) pdfArea.remove();
