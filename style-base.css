@@ -164,7 +164,7 @@ body.light .btn-ghost { border-color: rgba(30,24,8,0.4); }
 
 .book-cover-block { aspect-ratio: 2/3; border-radius: 4px; margin-bottom: 0.8rem; position: relative; overflow: hidden; box-shadow: 6px 10px 28px rgba(0,0,0,0.55); background: linear-gradient(135deg,#1e1a2e 0%,#12101a 100%); border: 1px solid rgba(212,135,42,0.15); display: flex; align-items: flex-end; padding: 10px; }
 .book-cover-block::before { content: ''; position: absolute; inset: 0; background: linear-gradient(160deg, rgba(212,135,42,0.08) 0%, transparent 60%); }
-.book-cover-title { font-family: 'Cormorant Garamond', serif; font-size: 13px; font-weight: 600; color: rgba(240,232,216,0.9); line-height: 1.3; position: relative; z-index: 1; word-break: break-word; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; max-height: 72px; }
+.book-cover-title { font-family: 'Cormorant Garamond', serif; font-size: 13px; font-weight: 600; color: rgba(240,232,216,0.9); line-height: 1.3; position: relative; z-index: 1; word-break: break-word; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4;line-clamp: 4; -webkit-box-orient: vertical; max-height: 72px; }
 .book-cover-overlay { position: absolute; inset: 0; background: rgba(13,12,10,0.65); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
 .book-card:hover .book-cover-overlay { opacity: 1; }
 @media (hover: none) { .book-cover-overlay { opacity: 1; background: rgba(13,12,10,0.45); } }
