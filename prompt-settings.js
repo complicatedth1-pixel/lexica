@@ -19,7 +19,7 @@ function getCurrentEconomicYear() {
   const d = new Date();
   const year = d.getFullYear();
   const month = d.getMonth() + 1; // 1-indexed
-  // Economic year starts April. If Jan-Mar, economic year is prev-curr.
+  // Economic year: Apr–Mar. Apr 2026–Mar 2027 = "2026-27"
   if (month >= 4) {
     return `${year}-${String(year + 1).slice(2)}`;
   } else {
@@ -27,18 +27,27 @@ function getCurrentEconomicYear() {
   }
 }
 
+function getCurrentBudgetYear() {
+  // Budget year = current economic year.
+  // Budget 2026-27 was presented Feb 2026 and runs Apr 2026–Mar 2027.
+  // So while we are in economic year 2026-27, budget year is also 2026-27.
+  // Budget is presented in Feb of the STARTING year of the economic year.
+  // e.g. Feb 2026 → Budget 2026-27 (April 2026 start)
+  // e.g. Feb 2027 → Budget 2027-28 (April 2027 start)
+  // So current running budget always = current economic year.
+  return getCurrentEconomicYear();
+}
+
 // ── Default instructions (Brain Builder) ─────────────────────
 function buildDefaultIndexInstructions() {
-  const today = getTodayString();
+  const today    = getTodayString();
   const econYear = getCurrentEconomicYear();
-  const budgetYear = (() => {
-    // Budget is presented in Feb for the upcoming year.
-    // e.g. Feb 2026 → Budget 2026-27
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = d.getMonth() + 1;
-    const budgetFY = m >= 4 ? y + 1 : y;
-    return `${budgetFY}-${String(budgetFY + 1).slice(2)}`;
+  const budgetYear = getCurrentBudgetYear();
+  const presentedYear = (() => {
+    // Budget is presented in Feb of the year the economic year starts.
+    // e.g. Budget 2026-27 presented Feb 2026 → starting year = 2026
+    const startYear = parseInt(econYear.split('-')[0]);
+    return startYear;
   })();
 
   return `Tu mera UPSC learning partner hai. Tera kaam samjhana hai — ratta nahi. Treat me like someone smart jo sirf dots connect nahi kar pa raha. Blank slate nahi hoon.
@@ -71,8 +80,8 @@ WHAT NOT TO DO:
 
 SOURCES & FACTS — NON-NEGOTIABLE:
 - Aaj ki date: ${today}. Current economic year: ${econYear}.
-- SIRF latest figures. Budget ${budgetYear} (Feb ${new Date().getFullYear()} presented). Latest RBI/MoSPI/PIB data only.
-- Agar kuch yearly hai → latest year ka data chahiye. Agar current status puchh raha hoon → ${new Date().getFullYear()} ki situation.
+- SIRF latest figures. Budget ${budgetYear} (Feb ${presentedYear} presented). Latest RBI/MoSPI/PIB data only.
+- Agar kuch yearly hai → latest year ka data chahiye. Agar current status puchh raha hoon → ${presentedYear} ki situation.
 - Har fact ke saath source + link.
 - Outdated data STRICTLY banned. Vague generalisations banned.
 - Wrong facts afford nahi ho sakte — fact-check non-negotiable.
@@ -133,15 +142,10 @@ STRUCTURE RULES:
 }
 
 function buildDefaultPageInstructions() {
-  const today = getTodayString();
-  const econYear = getCurrentEconomicYear();
-  const budgetYear = (() => {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = d.getMonth() + 1;
-    const budgetFY = m >= 4 ? y + 1 : y;
-    return `${budgetFY}-${String(budgetFY + 1).slice(2)}`;
-  })();
+  const today      = getTodayString();
+  const econYear   = getCurrentEconomicYear();
+  const budgetYear = getCurrentBudgetYear();
+  const presentedYear = parseInt(econYear.split('-')[0]);
 
   return `Tu mera UPSC learning partner hai. Tera kaam samjhana hai — ratta nahi. Treat me like someone smart jo sirf dots connect nahi kar pa raha. Blank slate nahi hoon.
 
@@ -173,8 +177,8 @@ WHAT NOT TO DO:
 
 SOURCES & FACTS — NON-NEGOTIABLE:
 - Aaj ki date: ${today}. Current economic year: ${econYear}.
-- SIRF latest figures. Budget ${budgetYear} (Feb ${new Date().getFullYear()} presented). Latest RBI/MoSPI/PIB data only.
-- Agar kuch yearly hai → latest year ka data chahiye. Agar current status puchh raha hoon → ${new Date().getFullYear()} ki situation.
+- SIRF latest figures. Budget ${budgetYear} (Feb ${presentedYear} presented). Latest RBI/MoSPI/PIB data only.
+- Agar kuch yearly hai → latest year ka data chahiye. Agar current status puchh raha hoon → ${presentedYear} ki situation.
 - Har fact ke saath source + link as <a href="url" target="_blank">Source Name</a>.
 - Outdated data STRICTLY banned. Vague generalisations banned.
 - Wrong facts afford nahi ho sakte — fact-check non-negotiable.
