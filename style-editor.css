@@ -19,7 +19,7 @@
 .topbar {
   min-height: 48px; background: rgba(15,13,20,0.97); backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid rgba(255,255,255,0.06);
-  display: flex; align-items: center; padding: 4px 10px; gap: 6px 10px;
+  display: flex; align-items: center; padding: 4px 110px 4px 10px; gap: 6px 10px;
   flex-shrink: 0; z-index: 200; overflow-x: auto; overflow-y: hidden;
   scrollbar-width: none; -webkit-overflow-scrolling: touch; flex-wrap: nowrap;
 }

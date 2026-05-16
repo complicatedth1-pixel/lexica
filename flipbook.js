@@ -117,7 +117,7 @@ function ensureShell() {
   document.body.appendChild(footer);
 
   // ── Wire up events ──────────────────────────────────────────────────
-  document.getElementById('fbHomeLink').addEventListener('click', closeFlipbook);
+  document.getElementById('fbHomeLink').addEventListener('click', () => window._closeFlipbookViewer && window._closeFlipbookViewer());
   document.getElementById('fbZoomSelect').addEventListener('change', function () {
     zoomTo(parseFloat(this.value), true);
   });
@@ -176,11 +176,15 @@ function ensureShell() {
 
 // ── Zoom ───────────────────────────────────────────────────────────────────
 function applyZoom(animated) {
-  const bookW = _pdfLayout === 'double' ? PG_W * 2 : PG_W;
+  const isDouble = _pdfLayout === 'double';
+  const bookW = isDouble ? PG_W * 2 : PG_W;
   const bookH = PG_H;
-  const cw    = Math.round(bookW * _scale);
-  const ch    = Math.round(bookH * _scale);
-  const vpEl  = vp(), cvsEl = cvs();
+  const vpEl  = vp(), cvsEl = cvs(), bkEl = bookEl();
+  const autoScale = parseFloat(vpEl.dataset.autoScale || 1);
+  const totalScale = autoScale * _scale;
+
+  const cw = Math.round(bookW * totalScale);
+  const ch = Math.round(bookH * totalScale);
 
   const prevCW  = cvsEl.offsetWidth  || bookW;
   const prevCH  = cvsEl.offsetHeight || bookH;
@@ -191,11 +195,11 @@ function applyZoom(animated) {
 
   const dur = animated ? '0.22s' : '0s';
   cvsEl.style.transition = `width ${dur} ease, height ${dur} ease`;
-  bookEl().style.transition = `transform ${dur} ease`;
+  bkEl.style.transition  = `transform ${dur} ease`;
   cvsEl.style.width  = cw + 'px';
   cvsEl.style.height = ch + 'px';
-  bookEl().style.transformOrigin = 'top left';
-  bookEl().style.transform = `scale(${_scale})`;
+  bkEl.style.transformOrigin = 'top left';
+  bkEl.style.transform = `scale(${totalScale})`;
 
   requestAnimationFrame(() => {
     if (isZoomed()) {
@@ -235,12 +239,42 @@ window._fbUpdateFlipLock = updateFlipLock; // called from editor.js setActiveHig
 
 // ── Size viewport to window ────────────────────────────────────────────────
 function sizeViewport() {
-  const vpEl  = vp();
-  const bookW = _pdfLayout === 'double' ? PG_W * 2 : PG_W;
-  const maxW  = Math.min(window.innerWidth - 32, bookW);
-  const maxH  = window.innerHeight - 48 - 52; // topbar 48 + footer 52
-  vpEl.style.width  = maxW + 'px';
-  vpEl.style.height = maxH + 'px';
+  const vpEl    = vp();
+  const isDouble = _pdfLayout === 'double';
+  const bookW   = isDouble ? PG_W * 2 : PG_W;
+  const bookH   = PG_H;
+  const topbarH = 48, footerH = 52, padding = 16;
+  const availW  = window.innerWidth  - padding;
+  const availH  = window.innerHeight - topbarH - footerH - padding;
+
+  // Calculate scale so the full book spread fits in the available area
+  const scaleW = availW  / bookW;
+  const scaleH = availH  / bookH;
+  const autoScale = Math.min(scaleW, scaleH, 1.0); // never upscale beyond 100%
+
+  // Resize the fbBook element so it renders at the right pixel size
+  const bkEl = bookEl();
+  if (bkEl) {
+    bkEl.style.transformOrigin = 'top left';
+    bkEl.style.transform = `scale(${autoScale})`;
+    bkEl.style.width  = bookW + 'px';
+    bkEl.style.height = bookH + 'px';
+  }
+
+  const displayW = Math.round(bookW * autoScale);
+  const displayH = Math.round(bookH * autoScale);
+
+  const cvsEl = cvs();
+  if (cvsEl) {
+    cvsEl.style.width  = displayW + 'px';
+    cvsEl.style.height = displayH + 'px';
+  }
+
+  vpEl.style.width  = displayW + 'px';
+  vpEl.style.height = displayH + 'px';
+
+  // Store auto-scale so zoom is relative to it
+  vpEl.dataset.autoScale = autoScale;
 }
 
 // ── Render a PDF page onto a <canvas> ─────────────────────────────────────
@@ -351,6 +385,11 @@ async function initFlipbook(pdf, book) {
   _pageFlip.on('changeState', () => updateFlipLock());
 
   updateFbUI();
+  // Re-size on window resize
+  window.addEventListener('resize', () => {
+    if (!document.getElementById('flipbookShell')?.classList.contains('fb-visible')) return;
+    sizeViewport(); applyZoom(false);
+  });
   applyZoom(false);
 
   // Lazy-render pages as they scroll into view
@@ -442,15 +481,20 @@ window._openFlipbookViewer = async function (book, pdf) {
 
 // ── Close ──────────────────────────────────────────────────────────────────
 window._closeFlipbookViewer = function (skipHomeClick) {
-  document.getElementById('flipbookShell').classList.remove('fb-visible');
-  document.getElementById('fbFooter').classList.remove('fb-visible');
+  const shell  = document.getElementById('flipbookShell');
+  const footer = document.getElementById('fbFooter');
+  if (shell)  shell.classList.remove('fb-visible');
+  if (footer) footer.classList.remove('fb-visible');
   if (_pageFlip) { try { _pageFlip.destroy(); } catch (e) {} _pageFlip = null; }
   const tog = document.getElementById('pdfLayoutToggle');
   if (tog) tog.remove();
   if (!skipHomeClick) {
+    // Book mode: trigger homeLink to go back to homepage via library.js goHome()
     const hl = document.getElementById('homeLink');
     if (hl) hl.click();
   }
+  // PDF mode (skipHomeClick=true): pdf.js homeLink handler already cleaned up pdfMode
+  // and called us with skipHomeClick=true — nothing more to do here.
 };
 // ═══════════════════════════════════════════════════════════════════════
 // BOOK FLIPBOOK VIEWER  — paginated reader for created books
@@ -579,6 +623,10 @@ window._openBookFlipbookViewer = async function (topics, startTopicIndex, bookNa
   // Ensure the shell exists (built by the PDF flipbook code above)
   ensureShell();
 
+  // Hide editor shell so sidebars don't bleed through as black bars
+  const editorShell = document.getElementById('editor-shell');
+  if (editorShell) editorShell.classList.remove('visible');
+
   const shell  = document.getElementById('flipbookShell');
   const footer = document.getElementById('fbFooter');
   shell.classList.add('fb-visible');
@@ -687,8 +735,8 @@ function bookNameLabel() {
 // that the zoom / lock controls reference. Add this at module level in flipbook.js.
 // (We expose it here since it's in the same file — the IIFE closure shares scope.)
 window._fbSetPageFlip = function(pf) {
-  // This reaches into the outer IIFE's _pageFlip variable via the global setter
-  // We re-bind the footer buttons to the new instance
+  _pageFlip = pf; // update the outer IIFE closure variable directly
+  // Re-bind the footer buttons to the new instance
   const prev = document.getElementById('fbPrevBtn');
   const next = document.getElementById('fbNextBtn');
   if (prev) prev.onclick = () => pf.flipPrev();

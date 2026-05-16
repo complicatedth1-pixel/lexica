@@ -30,7 +30,10 @@ async function openPDFViewer(book) {
   pdfViewerBook = book; pdfMode = true; pdfCurrentPage = 1;
   const homepage    = document.getElementById('homepage');
   const editorShell = document.getElementById('editor-shell');
-  homepage.classList.add('hidden'); editorShell.classList.add('visible');
+  homepage.classList.add('hidden');
+  // We'll show the editor-shell briefly so sidebar outline can be built,
+  // but hide it before opening the flipbook shell (prevents black-sidebar issue)
+  editorShell.classList.add('visible');
   document.getElementById('sidebarBookTitle').textContent = book.name;
   setPDFTopbarVisible(true);
   document.getElementById('sectionsContainer').innerHTML = '';
@@ -42,18 +45,20 @@ async function openPDFViewer(book) {
 
   loadPDFJS(async () => {
     try {
-      let base64 = book.pdfBase64;
-      if (!base64) {
-        showToast('⏳ Downloading from cloud…');
-        base64 = await loadPdfFromStorage(book.id);
-        if (base64) book.pdfBase64 = base64;
-      }
+      // Always re-download from storage to avoid stale/expired 403 on second open.
+      // base64 is kept only in the local variable, NOT cached back into book.pdfBase64.
+      let base64 = null;
+      showToast('⏳ Loading PDF…');
+      base64 = await loadPdfFromStorage(book.id);
       if (!base64) { showToast('❌ PDF not found. Please re-import.'); return; }
+
       const binary = atob(base64); const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       window.pdfjsLib.getDocument({ data: bytes }).promise.then(async pdf => {
         pdfViewerDoc = pdf;
         await buildPDFOutlineSidebar(pdf);
+        // Hide editor-shell BEFORE opening flipbook so sidebars don't show black
+        editorShell.classList.remove('visible');
         // Route to flipbook viewer
         if (window._openFlipbookViewer) {
           await window._openFlipbookViewer(book, pdf);
@@ -346,8 +351,11 @@ document.getElementById('homeLink').addEventListener('click', () => {
   document.getElementById('editor').style.display = '';
   const pdfBtn = document.getElementById('pdfConfirmBtn');
   if (pdfBtn) pdfBtn.style.display = 'none';
-  // Close flipbook shell if open
-  if (window._closeFlipbookViewer) window._closeFlipbookViewer(true); // true = skip homeLink re-click
+  // Ensure editor-shell is hidden (was hidden before flipbook opened)
+  const editorShell = document.getElementById('editor-shell');
+  if (editorShell) editorShell.classList.remove('visible');
+  // Close flipbook shell if open (skipHomeClick=true to avoid recursion)
+  if (window._closeFlipbookViewer) window._closeFlipbookViewer(true);
 }, true);
 
 window.openPDFViewer = openPDFViewer;
