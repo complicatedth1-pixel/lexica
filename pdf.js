@@ -31,9 +31,7 @@ async function openPDFViewer(book) {
   const homepage    = document.getElementById('homepage');
   const editorShell = document.getElementById('editor-shell');
   homepage.classList.add('hidden');
-  // We'll show the editor-shell briefly so sidebar outline can be built,
-  // but hide it before opening the flipbook shell (prevents black-sidebar issue)
-  editorShell.classList.add('visible');
+  editorShell.classList.add('visible');  // keep visible so sidebars work
   document.getElementById('sidebarBookTitle').textContent = book.name;
   setPDFTopbarVisible(true);
   document.getElementById('sectionsContainer').innerHTML = '';
@@ -45,24 +43,15 @@ async function openPDFViewer(book) {
 
   loadPDFJS(async () => {
     try {
-      // Always re-download from storage to avoid stale/expired 403 on second open.
-      // base64 is kept only in the local variable, NOT cached back into book.pdfBase64.
-      let base64 = null;
       showToast('⏳ Loading PDF…');
-      base64 = await loadPdfFromStorage(book.id);
+      const base64 = await loadPdfFromStorage(book.id);
       if (!base64) { showToast('❌ PDF not found. Please re-import.'); return; }
-
       const binary = atob(base64); const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       window.pdfjsLib.getDocument({ data: bytes }).promise.then(async pdf => {
         pdfViewerDoc = pdf;
         await buildPDFOutlineSidebar(pdf);
-        // Hide editor-shell BEFORE opening flipbook so sidebars don't show black
-        editorShell.classList.remove('visible');
-        // Route to flipbook viewer
-        if (window._openFlipbookViewer) {
-          await window._openFlipbookViewer(book, pdf);
-        }
+        if (window._openFlipbookViewer) await window._openFlipbookViewer(book, pdf);
       }).catch(err => showToast('❌ ' + err.message));
     } catch(err) { showToast('❌ ' + err.message); }
   });
@@ -318,7 +307,7 @@ function renderPDFConfirmBtn() {
   if (!btn) {
     btn = document.createElement('button');
     btn.id = 'pdfConfirmBtn';
-    btn.style.cssText = `position:fixed;bottom:28px;right:28px;z-index:999;font-family:sans-serif;font-size:13px;padding:10px 20px;border-radius:8px;cursor:pointer;transition:all .2s;box-shadow:0 4px 18px rgba(0,0,0,0.35);`;
+    btn.style.cssText = `position:fixed;bottom:80px;right:28px;z-index:999;font-family:sans-serif;font-size:13px;padding:10px 20px;border-radius:8px;cursor:pointer;transition:all .2s;box-shadow:0 4px 18px rgba(0,0,0,0.35);`;
     document.body.appendChild(btn);
   }
   if (!pdfViewerBook || pdfCurrentPage === null) { btn.style.display = 'none'; return; }

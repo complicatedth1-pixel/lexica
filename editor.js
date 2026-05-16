@@ -250,7 +250,7 @@ let confirmBtn = document.getElementById('pageConfirmBtn');
 if (!confirmBtn) {
   confirmBtn = document.createElement('button');
   confirmBtn.id = 'pageConfirmBtn';
-  confirmBtn.style.cssText = `position:fixed;bottom:28px;right:28px;z-index:999;font-family:sans-serif;font-size:13px;padding:10px 20px;border-radius:8px;cursor:pointer;transition:all .2s;box-shadow:0 4px 18px rgba(0,0,0,0.35);`;
+  confirmBtn.style.cssText = `position:fixed;bottom:80px;right:28px;z-index:999;font-family:sans-serif;font-size:13px;padding:10px 20px;border-radius:8px;cursor:pointer;transition:all .2s;box-shadow:0 4px 18px rgba(0,0,0,0.35);`;
   document.body.appendChild(confirmBtn);
 }
 const isConfirmed = tp.confirmed === true;
@@ -603,22 +603,19 @@ function showToast(msg) {
 window.showToast = showToast;
 // ── Read Mode button ──────────────────────────────────
 document.getElementById('btn-read-mode').addEventListener('click', () => {
-  if (pdfMode) return; // don't trigger in PDF mode
+  if (pdfMode) return;
   const tp = getSelectedTopic();
   const ch = getChapter(selectedChapterId);
   if (!tp) { showToast('Select a topic first'); return; }
   if (!tp.sections || tp.sections.every(s => !(s.content && s.content.trim()))) {
     showToast('No content yet — write something first'); return;
   }
-  // Collect ALL topics in this chapter for prev/next navigation across topics
   const allTopics = ch ? ch.topics.map(t => ({
-    id: t.id,
-    name: t.name,
-    chapterName: ch.name,
-    sections: t.sections || []
+    id: t.id, name: t.name, chapterName: ch.name, sections: t.sections || []
   })) : [{ id: tp.id, name: tp.name, chapterName: '', sections: tp.sections || [] }];
   const startIndex = allTopics.findIndex(t => t.id === tp.id);
   if (window._openBookFlipbookViewer) {
+    document.getElementById('pageCard').classList.add('fb-active');
     window._openBookFlipbookViewer(allTopics, startIndex >= 0 ? startIndex : 0, bookName);
   }
 });

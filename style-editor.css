@@ -100,10 +100,9 @@
 /* ── CANVAS / EDITOR ── */
 .bg-canvas { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
 .bg-layer { position: absolute; inset: 0; z-index: 0; background-color: #e8e0d2; background-image: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(140,120,90,0.04) 3px, rgba(140,120,90,0.04) 4px), repeating-linear-gradient(90deg, transparent, transparent 4px, rgba(140,120,90,0.03) 4px, rgba(140,120,90,0.03) 5px), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='250'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='5' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='250' height='250' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E"); background-size: auto, auto, 250px 250px; }
-.doc-area { flex: 1; overflow-y: auto; position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; padding: 24px 12px 80px; scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.1) transparent; -webkit-overflow-scrolling: touch; }
+.doc-area { flex: 1; overflow-y: auto; position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; padding: 24px 12px 24px; scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.1) transparent; -webkit-overflow-scrolling: touch; }
 
-.page-card { width: 100%; max-width: calc(var(--text-width) + 80px); padding: 32px 24px 60px; border-radius: 8px; background: rgba(255,252,245,0.88); backdrop-filter: blur(28px) saturate(1.2); -webkit-backdrop-filter: blur(28px) saturate(1.2); border: 1px solid rgba(200,185,160,0.45); box-shadow: 0 10px 60px rgba(100,80,40,0.1), 0 2px 0 rgba(255,255,255,0.7) inset; color: #28200e; }
-
+.page-card.fb-active { padding: 0; display: flex; flex-direction: column; }
 .editor { font-family: var(--font); font-size: var(--font-size); line-height: var(--line-height); color: inherit; outline: none; min-height: 360px; max-width: var(--text-width); margin: 0 auto; caret-color: #7a5c2a; }
 .editor p { margin-bottom: 1.5em; }
 .editor h2 { font-size: 1.1rem; font-weight: 700; font-style: italic; margin: 2em 0 0.8em; opacity: 0.65; }
@@ -295,82 +294,250 @@ line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 }
 .pdf-hl-overlay.highlight-p { background: #ffe566; opacity: 0.5; }
 .pdf-hl-overlay.highlight-m { background: #7ddb7d; opacity: 0.5; }
-/* ── FLIPBOOK VIEWER ── */
-#flipbookShell {
-  position: fixed; inset: 0; z-index: 250;
-  background: #12100a;
-  background-image:
-    radial-gradient(ellipse 90% 60% at 50% 110%, rgba(100,65,20,0.45) 0%, transparent 65%),
-    radial-gradient(ellipse 70% 40% at 50% -10%, rgba(60,35,10,0.25) 0%, transparent 60%);
-  display: none; flex-direction: column; align-items: center;
-  font-family: 'Lora', serif;
+/* ── FLIP/* ── FLIPBOOK INLINE SHELL ─────────────────────────── */
+/* Embedded in pageCard — NOT fullscreen */
+#fbInlineShell {
+  display: none;
+  flex-direction: column;
+  width: 100%;
+  /* Height: fill the available doc-area. doc-area has padding-bottom:80px so we set
+     a min-height and let flex do the rest */
+  min-height: 600px;
+  height: calc(100vh - 140px); /* topbar(48) + some margin */
+  background: transparent;
+  position: relative;
 }
-#flipbookShell.fb-visible { display: flex; }
 
-#fbTopbar {
-  width: 100%; min-height: 48px;
-  background: rgba(15,13,20,0.97); backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  display: flex; align-items: center; padding: 4px 10px; gap: 6px 10px;
-  flex-shrink: 0; z-index: 20; overflow-x: auto; scrollbar-width: none;
+#fbInlineBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(200,185,160,0.25);
+  background: rgba(255,252,245,0.6);
+  border-radius: 6px 6px 0 0;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  row-gap: 4px;
 }
-#fbTopbar::-webkit-scrollbar { display: none; }
+
+#fbViewport {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #f0ede4;
+  border-left: 1px solid rgba(200,185,160,0.3);
+  border-right: 1px solid rgba(200,185,160,0.3);
+  min-height: 0;
+}
 
 #fbZoomViewport {
-  overflow: auto; scrollbar-width: none; -ms-overflow-style: none;
-  cursor: default; position: relative; flex-shrink: 0;
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  cursor: default;
+  position: relative;
+  flex-shrink: 0;
 }
 #fbZoomViewport::-webkit-scrollbar { display: none; }
 
 #fbZoomCanvas {
-  position: relative; display: flex;
-  align-items: flex-start; justify-content: flex-start;
-  transition: width 0.22s ease, height 0.22s ease;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
 }
 
-#fbBook { transform-origin: top left; transition: transform 0.22s ease; flex-shrink: 0; }
+#fbBook { transform-origin: top left; flex-shrink: 0; }
 
+#fbNavBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-top: 1px solid rgba(200,185,160,0.25);
+  background: rgba(255,252,245,0.6);
+  border-radius: 0 0 6px 6px;
+  flex-shrink: 0;
+}
+
+/* Page leaves */
 .fb-page {
-  background: #fff; overflow: hidden; position: relative;
+  background: #fff;
+  overflow: hidden;
+  position: relative;
 }
-.fb-page:nth-child(odd)  { background: linear-gradient(to right, #fff 92%, #e8e8e8 100%); }
-.fb-page:nth-child(even) { background: linear-gradient(to left,  #fff 92%, #e8e8e8 100%); }
+.fb-page:nth-child(odd)  { background: linear-gradient(to right, #fffdf8 93%, #ede9e0 100%); }
+.fb-page:nth-child(even) { background: linear-gradient(to left,  #fffdf8 93%, #ede9e0 100%); }
 
-#fbFooter {
-  position: fixed; bottom: 0; left: 0; right: 0; height: 52px;
-  background: rgba(15,10,4,0.93); backdrop-filter: blur(10px);
-  border-top: 1px solid rgba(201,168,76,0.15);
-  display: none; align-items: center; justify-content: center; gap: 0; z-index: 99999;
+/* Inline bar controls */
+.fb-layout-btn {
+  background: transparent;
+  border: 1px solid rgba(160,130,100,0.25);
+  color: #887055;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
 }
-#fbFooter.fb-visible { display: flex; }
+.fb-layout-btn:hover  { background: rgba(160,130,100,0.12); }
+.fb-layout-btn.active { background: rgba(212,135,42,0.18); border-color: rgba(212,135,42,0.45); color: #d4a060; }
 
-.fb-footer-sec { display: flex; align-items: center; gap: 10px; padding: 0 16px; }
-.fb-footer-div { width: 1px; height: 22px; background: rgba(201,168,76,0.15); }
+.fb-inline-btn {
+  background: transparent;
+  border: 1px solid rgba(160,130,100,0.22);
+  color: #887055;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.fb-inline-btn:hover { background: rgba(160,130,100,0.1); }
+.fb-close-btn { color: #c0695a; border-color: rgba(200,100,80,0.25); }
+.fb-close-btn:hover { background: rgba(200,100,80,0.1); }
 
 .fb-ctrl-btn {
-  background: transparent; border: 1px solid rgba(201,168,76,0.32);
-  color: rgba(201,168,76,0.75); padding: 6px 18px;
-  font-family: 'Lora', serif; font-size: 0.68rem; letter-spacing: 0.22em;
-  text-transform: uppercase; cursor: pointer; border-radius: 2px; transition: all 0.18s;
+  background: transparent;
+  border: 1px solid rgba(160,130,100,0.3);
+  color: #887055;
+  padding: 5px 18px;
+  font-family: 'Lora', serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.15s;
 }
-.fb-ctrl-btn:hover:not(:disabled) { border-color: rgba(201,168,76,0.65); color: #c9a84c; background: rgba(201,168,76,0.08); }
-.fb-ctrl-btn:disabled { opacity: 0.25; cursor: default; }
+.fb-ctrl-btn:hover:not(:disabled) { background: rgba(160,130,100,0.12); }
+.fb-ctrl-btn:disabled { opacity: 0.3; cursor: default; }
 
 .fb-zoom-btn {
-  background: transparent; border: 1px solid rgba(201,168,76,0.28);
-  color: rgba(201,168,76,0.65); width: 28px; height: 28px;
-  font-size: 1rem; cursor: pointer; border-radius: 2px;
-  display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.18s;
+  background: transparent;
+  border: 1px solid rgba(160,130,100,0.25);
+  color: #887055;
+  width: 26px; height: 26px;
+  font-size: 1rem;
+  cursor: pointer;
+  border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  transition: all 0.15s;
 }
-.fb-zoom-btn:hover { border-color: rgba(201,168,76,0.6); color: #c9a84c; background: rgba(201,168,76,0.08); }
+.fb-zoom-btn:hover { background: rgba(160,130,100,0.1); }
 
 .fb-page-ind {
-  font-family: 'Playfair Display', serif; color: rgba(201,168,76,0.4);
-  font-size: 0.72rem; letter-spacing: 0.14em; min-width: 62px; text-align: center;
+  font-family: 'Lora', serif;
+  color: #887055;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
 }
 .fb-zoom-ind {
-  font-family: 'Lora', serif; color: rgba(201,168,76,0.35);
-  font-size: 0.65rem; letter-spacing: 0.12em; min-width: 42px; text-align: center;
+  font-family: sans-serif;
+  color: #887055;
+  font-size: 0.7rem;
+  min-width: 38px;
+  text-align: center;
+}
+
+/* Spine shadow */
+.stf__block::after {
+  content: '';
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 40px; height: 100%;
+  background: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.1) 20%,
+    rgba(0,0,0,0.25) 45%, rgba(0,0,0,0.32) 50%, rgba(0,0,0,0.25) 55%,
+    rgba(0,0,0,0.1) 80%, transparent 100%);
+  pointer-events: none; z-index: 1;
+}
+
+/* Highlight active → crosshair */
+body.hl-active-mode #fbZoomViewport { cursor: crosshair !important; }
+
+/* ── BOOK PAGES ─────────────────────────────────────── */
+.fb-book-page {
+  background: #fffdf8;
+  font-family: var(--font, 'Merriweather', Georgia, serif);
+  font-size: 14px;
+  line-height: 1.85;
+  color: #1e1808;
+  padding: 48px 56px 44px;
+  box-sizing: border-box;
+  overflow: hidden;
+  position: relative;
+}
+.fb-book-page:nth-child(odd)  { background: linear-gradient(to right, #fffdf8 94%, #f0ece0 100%); }
+.fb-book-page:nth-child(even) { background: linear-gradient(to left,  #fffdf8 94%, #f0ece0 100%); }
+.fb-book-page h3 {
+  font-family: 'Lora', serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #3a2c1a;
+  margin: 0 0 0.7em;
+  letter-spacing: 0.03em;
+}
+.fb-book-page p  { margin: 0 0 0.9em; }
+.fb-book-page ul, .fb-book-page ol { margin: 0 0 0.9em 1.4em; }
+.fb-book-page li { margin-bottom: 0.3em; }
+.fb-book-page blockquote {
+  border-left: 2px solid rgba(120,80,30,0.3);
+  padding-left: 1em;
+  margin: 0 0 0.9em 0;
+  color: #5a4a30;
+  font-style: italic;
+}
+.fb-book-page a { color: #7a5030; text-underline-offset: 3px; }
+
+.fb-page-chapter-label {
+  font-family: sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(120,80,30,0.5);
+  margin-bottom: 4px;
+}
+.fb-section-title {
+  font-family: 'Lora', serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #3a2c1a;
+  margin-bottom: 18px;
+  line-height: 1.3;
+}
+.fb-page-number {
+  position: absolute;
+  bottom: 22px;
+  font-family: serif;
+  font-size: 11px;
+  color: rgba(120,80,30,0.4);
+  letter-spacing: 0.1em;
+}
+.fb-book-page:nth-child(odd)  .fb-page-number { right: 28px; }
+.fb-book-page:nth-child(even) .fb-page-number { left:  28px; }
+
+/* Layout toggle in right panel (PDF mode) */
+.pdf-layout-toggle {
+  display: flex; gap: 6px; padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  margin-bottom: 6px;
+}
+.pdf-layout-btn {
+  flex: 1; padding: 5px 0; border-radius: 4px; font-size: 10px;
+  font-family: sans-serif; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: transparent; color: #665f78;
+  letter-spacing: 0.05em; transition: all 0.15s;
+}
+.pdf-layout-btn.active {
+  background: rgba(212,135,42,0.18);
+  border-color: rgba(212,135,42,0.4);
+  color: #d4a060;
 }
 
 /* Page layout toggle in right panel */
