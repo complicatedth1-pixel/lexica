@@ -466,7 +466,17 @@ line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   background: #fffdf8; /* prevents dark shell showing through during flip animation */
 }
 
-#fbBook { transform-origin: top left; flex-shrink: 0; }
+/* When cover is shown alone, left half shows as empty — give it a warm backing */
+.stf__wrapper { background: #fffdf8; }
+
+#fbBook { flex-shrink: 0; position: relative; }
+
+/* fbScaleWrap is the scaling layer — keeps fbBook at natural size for StPageFlip */
+#fbScaleWrap {
+  transform-origin: 0 0;
+  flex-shrink: 0;
+  position: relative;
+}
 
 #fbNavBar {
   display: flex;
@@ -663,11 +673,16 @@ line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 #fbZoomViewport {
   position: relative;
 }
-/* Ensure stf wrapper is opaque (fixes transparent backwards flip) */
-/* The stf__item itself is positioned by StPageFlip — make inner content fill it */
+/* Ensure stf wrapper and all page elements are fully opaque */
 .stf__item { background: #fffdf8 !important; }
-/* stf__block must be opaque white — dark shell shows through otherwise */
 .stf__block { background: #fffdf8 !important; }
+/* ALL .fb-page elements (including clones made by StPageFlip) must be opaque */
+.fb-page { background: #fffdf8; }
+.fb-page:nth-child(odd)  { background: linear-gradient(to right, #fffdf8 92%, #ede9e0 100%) !important; }
+.fb-page:nth-child(even) { background: linear-gradient(to left,  #fffdf8 92%, #ede9e0 100%) !important; }
+/* Hard covers stay dark */
+.fb-page.hard,
+.fb-page[data-density="hard"] { background: linear-gradient(135deg, #1c1008 0%, #2e1a09 60%, #3a2010 100%) !important; }
 /* The actual page div inside stf__item must fill it fully */
 .stf__item > .fb-page,
 .stf__item > .fb-book-page {
@@ -675,8 +690,6 @@ line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   top: 0 !important; left: 0 !important;
   width: 100% !important; height: 100% !important;
 }
-/* Temporary copy (cloned page during flip) must also be opaque */
-.stf__item.--soft { background: #fffdf8 !important; }
 /* Inline bar controls */
 .fb-layout-btn {
   background: transparent;

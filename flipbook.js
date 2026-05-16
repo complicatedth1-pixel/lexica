@@ -52,9 +52,10 @@ let _dragStart  = { x: 0, y: 0 };
 let _scrollStart = { l: 0, t: 0 };
 
 // ── DOM refs ──────────────────────────────────────────────────────────────
-const getVp  = () => document.getElementById('fbZoomViewport');
-const getCvs = () => document.getElementById('fbZoomCanvas');
-const getBk  = () => document.getElementById('fbBook');
+const getVp   = () => document.getElementById('fbZoomViewport');
+const getCvs  = () => document.getElementById('fbZoomCanvas');
+const getBk   = () => document.getElementById('fbBook');
+const getWrap = () => document.getElementById('fbScaleWrap');
 
 // ── Build inline shell (runs once) ────────────────────────────────────────
 // The shell is injected into #pageCard, replacing page content while visible.
@@ -87,7 +88,9 @@ function ensureShell() {
     <div id="fbViewport">
       <div id="fbZoomViewport">
         <div id="fbZoomCanvas">
-          <div id="fbBook"></div>
+          <div id="fbScaleWrap">
+            <div id="fbBook"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -206,7 +209,8 @@ function hideShell() {
 }
 
 // ── Viewport sizing ───────────────────────────────────────────────────────
-// Fits the flipbook spread inside the available doc-area width/height.
+// #fbBook stays at natural PG_W*2 x PG_H so StPageFlip's offsetWidth is correct.
+// #fbScaleWrap applies CSS transform: scale() for auto-fit + user zoom.
 function sizeViewport() {
   const vpEl = getVp();
   if (!vpEl) return;
@@ -215,7 +219,6 @@ function sizeViewport() {
   const spreadW  = isDouble ? PG_W * 2 : PG_W;
   const spreadH  = PG_H;
 
-  // Available area = fbViewport container (flex:1 inside fbInlineShell)
   const container = document.getElementById('fbViewport');
   if (!container) return;
   const availW = container.clientWidth  - 4;
@@ -223,18 +226,26 @@ function sizeViewport() {
 
   const scaleW = availW / spreadW;
   const scaleH = availH / spreadH;
-  _autoScale   = Math.min(scaleW, scaleH, 1.5); // allow slight upscale for small screens
+  _autoScale   = Math.min(scaleW, scaleH, 1.5);
 
+  // fbZoomViewport is exactly the display size (autoScale applied)
   const displayW = Math.round(spreadW * _autoScale);
   const displayH = Math.round(spreadH * _autoScale);
-
   vpEl.style.width  = displayW + 'px';
   vpEl.style.height = displayH + 'px';
 
+  // fbZoomCanvas matches viewport at base zoom
   const cvsEl = getCvs();
   if (cvsEl) {
     cvsEl.style.width  = displayW + 'px';
     cvsEl.style.height = displayH + 'px';
+  }
+
+  // fbBook is always at natural size — StPageFlip needs this
+  const bkEl = getBk();
+  if (bkEl) {
+    bkEl.style.width  = spreadW + 'px';
+    bkEl.style.height = spreadH + 'px';
   }
 }
 
@@ -242,40 +253,32 @@ function sizeViewport() {
 const isZoomed = () => _scale > 1.005;
 
 function applyZoom(animated) {
-  const vpEl = getVp(), cvsEl = getCvs(), bkEl = getBk();
-  if (!vpEl || !cvsEl || !bkEl) return;
+  const vpEl = getVp(), cvsEl = getCvs(), wrapEl = getWrap();
+  if (!vpEl || !cvsEl || !wrapEl) return;
 
   const isDouble = _pdfLayout === 'double';
   const spreadW  = isDouble ? PG_W * 2 : PG_W;
   const spreadH  = PG_H;
-  const total    = _autoScale * _scale;
 
-  // Keep base canvas at _autoScale size (no resize = no flash).
-  // Apply additional _scale as a CSS transform on #fbBook — GPU composited.
-  const baseW = Math.round(spreadW * _autoScale);
-  const baseH = Math.round(spreadH * _autoScale);
-  cvsEl.style.transition = 'none';
-  cvsEl.style.width  = baseW + 'px';
-  cvsEl.style.height = baseH + 'px';
+  // Total visual scale = autoScale * userScale
+  const totalScale = _autoScale * _scale;
 
+  // fbScaleWrap: transform-origin top-left, scale by totalScale
+  // This scales the visual but #fbBook keeps its natural offsetWidth
   const dur = animated ? '0.22s' : '0s';
-  bkEl.style.transition     = `transform ${dur} ease`;
-  bkEl.style.transformOrigin = '0 0';
-  bkEl.style.transform = `scale(${total})`;
+  wrapEl.style.transition     = `transform ${dur} ease`;
+  wrapEl.style.transformOrigin = '0 0';
+  wrapEl.style.transform      = `scale(${totalScale})`;
+  wrapEl.style.width  = spreadW + 'px';
+  wrapEl.style.height = spreadH + 'px';
 
-  // Expand scroll area via spacer so user can pan after zoom
-  const scaledW = Math.round(spreadW * total);
-  const scaledH = Math.round(spreadH * total);
-  let spacer = vpEl.querySelector('.fb-zoom-spacer');
-  if (!spacer) {
-    spacer = document.createElement('div');
-    spacer.className = 'fb-zoom-spacer';
-    vpEl.appendChild(spacer);
-  }
-  spacer.style.width  = scaledW + 'px';
-  spacer.style.height = scaledH + 'px';
+  // fbZoomCanvas must be large enough to scroll when zoomed
+  const scaledW = Math.round(spreadW * totalScale);
+  const scaledH = Math.round(spreadH * totalScale);
+  cvsEl.style.width  = scaledW + 'px';
+  cvsEl.style.height = scaledH + 'px';
 
-  // Preserve scroll centre across zoom changes
+  // Preserve scroll centre
   const prevW = parseFloat(vpEl.dataset.fbContentW) || scaledW;
   const prevH = parseFloat(vpEl.dataset.fbContentH) || scaledH;
   const cx = vpEl.scrollLeft + vpEl.clientWidth  / 2;
@@ -302,7 +305,6 @@ function applyZoom(animated) {
   if (outBtn) outBtn.disabled = _scale <= ZOOM_MIN;
   if (inBtn)  inBtn.disabled  = _scale >= ZOOM_MAX;
 
-  // Re-render PDF pages at zoom quality (debounced — don't stutter during animation)
   if (_mode === 'pdf' && _doc && isZoomed()) {
     clearTimeout(applyZoom._t);
     applyZoom._t = setTimeout(rerenderVisiblePdfPages, 240);
@@ -321,8 +323,8 @@ function updateFlipLock() {
   if (_pageFlip) {
     try { _pageFlip.getSettings().useMouseEvents = !locked; } catch(e) {}
   }
-  const bkEl = getBk();
-  if (bkEl) bkEl.classList.toggle('fb-flip-locked', locked);
+  const wrapEl = getWrap();
+  if (wrapEl) wrapEl.classList.toggle('fb-flip-locked', locked);
 }
 window._fbUpdateFlipLock = updateFlipLock;
 
@@ -451,7 +453,7 @@ async function initPdfFlipbook(pdf, book) {
     width:               PG_W,
     height:              PG_H,
     size:                'fixed',
-    showCover:           false,
+    showCover:           true,
     drawShadow:          true,
     maxShadowOpacity:    0.5,
     flippingTime:        600,
