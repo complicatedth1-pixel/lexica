@@ -134,6 +134,8 @@ async function renderAllPDFPagesInEditor(pdf, scale) {
           if (swRunning) swStart = Date.now();
           swDisplay.textContent = swFormat(swElapsed);
           document.getElementById('pdfPageInfo').textContent = `Page ${newPage} / ${pdf.numPages}`;
+          // Update the confirm button when page changes
+          if (window.renderPDFConfirmBtn) window.renderPDFConfirmBtn();
         }
       }
     });
@@ -150,6 +152,8 @@ async function renderAllPDFPagesInEditor(pdf, scale) {
   }, { rootMargin: '300px 0px', threshold: 0 });
   window._renderObserver = renderObserver; wrappers.forEach(w => renderObserver.observe(w));
   pdfCurrentPage = wasPage || 1;
+  // Initial render of confirm button after page load/change
+  if (window.renderPDFConfirmBtn) window.renderPDFConfirmBtn();
 }
 
 async function renderSinglePage(pdf, pageNum, wrapper, scale, dpr) {
@@ -308,6 +312,34 @@ function capturePDFVisibleArea() {
   a.click(); showToast(`✓ Captured page ${best.closest('[data-page]').dataset.page}`);
 }
 
+// ── PDF "Mark as Read" Confirm Button ──────────────
+function renderPDFConfirmBtn() {
+  let btn = document.getElementById('pdfConfirmBtn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'pdfConfirmBtn';
+    btn.style.cssText = `position:fixed;bottom:28px;right:28px;z-index:999;font-family:sans-serif;font-size:13px;padding:10px 20px;border-radius:8px;cursor:pointer;transition:all .2s;box-shadow:0 4px 18px rgba(0,0,0,0.35);`;
+    document.body.appendChild(btn);
+  }
+  if (!pdfViewerBook || pdfCurrentPage === null) { btn.style.display = 'none'; return; }
+  if (!pdfViewerBook.pageConfirmed) pdfViewerBook.pageConfirmed = {};
+  const isConfirmed = pdfViewerBook.pageConfirmed[pdfCurrentPage] === true;
+  btn.style.display = 'inline-flex';
+  btn.style.background = isConfirmed ? 'rgba(90,180,90,0.22)' : 'rgba(40,36,54,0.95)';
+  btn.style.border = `1px solid ${isConfirmed ? 'rgba(90,180,90,0.5)' : 'rgba(255,255,255,0.15)'}`;
+  btn.style.color = isConfirmed ? '#80d880' : '#c0b8d0';
+  btn.textContent = isConfirmed ? '✓ Read' : '○ Mark as Read';
+  btn.onclick = () => {
+    if (!pdfViewerBook.pageConfirmed) pdfViewerBook.pageConfirmed = {};
+    pdfViewerBook.pageConfirmed[pdfCurrentPage] = !pdfViewerBook.pageConfirmed[pdfCurrentPage];
+    saveBook(pdfViewerBook);
+    renderPDFConfirmBtn();
+    showToast(pdfViewerBook.pageConfirmed[pdfCurrentPage] ? '✓ Page marked as read' : 'Page unmarked');
+  };
+}
+
+window.renderPDFConfirmBtn = renderPDFConfirmBtn;
+
 // Clean up PDF mode on home
 document.getElementById('homeLink').addEventListener('click', () => {
   if (!pdfMode) return;
@@ -317,6 +349,8 @@ document.getElementById('homeLink').addEventListener('click', () => {
   const pageCard = document.getElementById('pageCard'); pageCard.removeAttribute('style');
   const pdfArea = document.getElementById('pdfCanvasArea'); if (pdfArea) pdfArea.remove();
   document.getElementById('editor').style.display = '';
+  const pdfBtn = document.getElementById('pdfConfirmBtn');
+  if (pdfBtn) pdfBtn.style.display = 'none';
 }, true);
 
 window.openPDFViewer = openPDFViewer;
