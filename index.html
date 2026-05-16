@@ -8,8 +8,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400;1,600&family=Outfit:wght@300;400;500;600&family=PT+Serif:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400;0,600;1,400&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=Crimson+Pro:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
 <link rel="stylesheet" href="style-base.css">
 <link rel="stylesheet" href="style-editor.css">
 </head>
@@ -105,7 +103,6 @@
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <button class="btn-add-book" onclick="openUploadPDFModal()" title="Import PDF">📄 PDF</button>
         <button class="btn-add-book" onclick="openExportBookPDFModal()" title="Export PDF">🖨 Export</button>
-
         <button class="btn-add-book" onclick="openNewBookModal()">+ New</button>
       </div>
     </div>
@@ -262,7 +259,6 @@
     <button class="btn-header-action" id="manageSectionsBtn">⊞ Sections</button>
     <button class="btn-header-action" id="uploadPageBtn">⬆ Upload</button>
     <button class="btn-header-action" id="exportPDFBtn" style="background:rgba(212,135,42,0.12);border-color:rgba(212,135,42,0.25);color:#d4a060;">🖨 PDF</button>
-    <button class="btn-header-action" id="btn-read-mode" title="Read this topic in flipbook">📖 Read</button>
     <input type="file" id="restoreBackupFile" accept=".html,.htm" style="display:none;">
   </div>
 
@@ -351,7 +347,6 @@
     <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#554e68;font-family:sans-serif;margin-bottom:6px;">Step 1 — Copy this prompt</div>
     <div id="pagePromptBox" style="background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.08);border-radius:5px;padding:12px;font-size:12px;font-family:monospace;color:#b0a8c8;line-height:1.7;white-space:pre-wrap;word-break:break-word;max-height:180px;overflow-y:auto;margin-bottom:8px;"></div>
     <button onclick="copyPrompt('pagePromptBox','copyPagePromptBtn')" id="copyPagePromptBtn" style="margin-bottom:14px;background:rgba(160,130,220,.15);border:1px solid rgba(160,130,220,.3);color:#c8b8e8;padding:5px 12px;border-radius:4px;font-size:11px;font-family:sans-serif;cursor:pointer;min-height:36px;">Copy Prompt</button>
-    <button onclick="window.promptSettings.openManager('page')" style="margin-bottom:14px;margin-left:6px;background:rgba(212,135,42,0.15);border:1px solid rgba(212,135,42,0.3);color:#d4a060;padding:5px 12px;border-radius:4px;font-size:11px;font-family:sans-serif;cursor:pointer;min-height:36px;">⚙ Prompt Preset</button>
     <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#554e68;font-family:sans-serif;margin-bottom:6px;">Step 2 — Upload AI's HTML response</div>
     <input type="file" id="uploadPageFile" accept=".html,.htm" style="display:none;">
     <button onclick="document.getElementById('uploadPageFile').click()" style="background:rgba(160,130,220,.15);border:1px solid rgba(160,130,220,.3);color:#c8b8e8;padding:7px 16px;border-radius:4px;font-size:12px;font-family:sans-serif;cursor:pointer;margin-bottom:8px;min-height:40px;">Choose HTML File…</button>
@@ -368,7 +363,6 @@
     <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#554e68;font-family:sans-serif;margin-bottom:6px;">Step 1 — Copy this prompt</div>
     <div id="chapterPromptBox" style="background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.08);border-radius:5px;padding:12px;font-size:12px;font-family:monospace;color:#b0a8c8;line-height:1.7;white-space:pre-wrap;word-break:break-word;max-height:180px;overflow-y:auto;margin-bottom:8px;"></div>
     <button onclick="copyPrompt('chapterPromptBox','copyChapterPromptBtn')" id="copyChapterPromptBtn" style="margin-bottom:14px;background:rgba(160,130,220,.15);border:1px solid rgba(160,130,220,.3);color:#c8b8e8;padding:5px 12px;border-radius:4px;font-size:11px;font-family:sans-serif;cursor:pointer;min-height:36px;">Copy Prompt</button>
-    <button onclick="window.promptSettings.openManager('index')" style="margin-bottom:14px;margin-left:6px;background:rgba(212,135,42,0.15);border:1px solid rgba(212,135,42,0.3);color:#d4a060;padding:5px 12px;border-radius:4px;font-size:11px;font-family:sans-serif;cursor:pointer;min-height:36px;">⚙ Prompt Preset</button>
     <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#554e68;font-family:sans-serif;margin-bottom:6px;">Step 2 — Upload AI's HTML response</div>
     <input type="file" id="uploadChapterFile" accept=".html,.htm" style="display:none;">
     <button onclick="document.getElementById('uploadChapterFile').click()" style="background:rgba(160,130,220,.15);border:1px solid rgba(160,130,220,.3);color:#c8b8e8;padding:7px 16px;border-radius:4px;font-size:12px;font-family:sans-serif;cursor:pointer;margin-bottom:8px;min-height:40px;">Choose HTML File…</button>
@@ -439,7 +433,6 @@
 
 <!-- SCRIPTS (order matters) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
 <script src="auth.js"></script>
 <script src="prompt-settings.js"></script>
 <script src="library.js"></script>
@@ -448,6 +441,6 @@
 <script src="analytics.js"></script>
 <script src="pdf.js"></script>
 <script src="editor.js"></script>
-<script src="flipbook.js"></script>
+
 </body>
 </html>

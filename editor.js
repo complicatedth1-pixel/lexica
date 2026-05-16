@@ -227,46 +227,13 @@ function renderPage() {
   const container = document.getElementById('sectionsContainer'), plainEditor = document.getElementById('editor');
   const titleBar = document.getElementById('pageTitleBar'), topicLabel = document.getElementById('pageTopicLabel');
   const chapterLabel = document.getElementById('pageChapterLabel'), pageProgress = document.getElementById('pageProgress');
-  
   const tp = getSelectedTopic();
-  if (!tp) {
-  container.innerHTML = '';
-  plainEditor.style.display = 'block';
-  titleBar.style.display = 'none';
-  const cb = document.getElementById('pageConfirmBtn');
-  if (cb) cb.style.display = 'none';
-  updateWordCount();
-  return;
-}
+  if (!tp) { container.innerHTML = ''; plainEditor.style.display = 'block'; titleBar.style.display = 'none'; updateWordCount(); return; }
   const ch = getChapter(selectedChapterId);
   plainEditor.style.display = 'none'; titleBar.style.display = 'block';
   topicLabel.textContent = tp.name; chapterLabel.textContent = ch ? '— ' + ch.name : '';
   if (!swRunning) { swElapsed = tp.timeSpent || 0; swSessionElapsed = 0; swDisplay.textContent = swElapsed > 0 ? swFormat(swElapsed) : '00:00'; }
   if (ch && ch.topics) { const pn = ch.topics.findIndex(t => t.id === tp.id) + 1; pageProgress.textContent = `Page ${pn} of ${ch.topics.length}`; }
-
-  // ── Confirmation tick ──
-  // Remove existing confirm btn if any (from previous render)
-let confirmBtn = document.getElementById('pageConfirmBtn');
-if (!confirmBtn) {
-  confirmBtn = document.createElement('button');
-  confirmBtn.id = 'pageConfirmBtn';
-  confirmBtn.style.cssText = `position:fixed;bottom:80px;right:28px;z-index:999;font-family:sans-serif;font-size:13px;padding:10px 20px;border-radius:8px;cursor:pointer;transition:all .2s;box-shadow:0 4px 18px rgba(0,0,0,0.35);`;
-  document.body.appendChild(confirmBtn);
-}
-const isConfirmed = tp.confirmed === true;
-confirmBtn.style.display = 'inline-flex';
-confirmBtn.style.background = isConfirmed ? 'rgba(90,180,90,0.22)' : 'rgba(40,36,54,0.95)';
-confirmBtn.style.border = `1px solid ${isConfirmed ? 'rgba(90,180,90,0.5)' : 'rgba(255,255,255,0.15)'}`;
-confirmBtn.style.color = isConfirmed ? '#80d880' : '#c0b8d0';
-confirmBtn.textContent = isConfirmed ? '✓ Read' : '○ Mark as Read';
-confirmBtn.onclick = () => {
-  tp.confirmed = !tp.confirmed;
-  saveAll();
-  renderPage();
-  showToast(tp.confirmed ? '✓ Page marked as read' : 'Page unmarked');
-};
-  pageTitleBar.appendChild(confirmBtn);
-
   if (!tp.sections) tp.sections = [];
   if (tp.sections.length === 0) { container.innerHTML = `<div style="padding:20px 0;text-align:center;font-family:sans-serif;font-size:13px;color:#a09080;font-style:italic;">No sections yet. Click <strong style="color:#c0b8d0;">⊞ Sections</strong> to add sections.</div>`; updateWordCount(); return; }
   container.innerHTML = '';
@@ -530,20 +497,17 @@ function setActiveHighlighter(type) {
   const hlP = document.getElementById('hl-p');
   const hlM = document.getElementById('hl-m');
   if (activeHlType === type) {
+    // Toggle off
     activeHlType = null;
     hlP.classList.remove('hl-active');
     hlM.classList.remove('hl-active');
-    document.body.classList.remove('hl-active-mode');
     showToast('Highlighter off');
   } else {
     activeHlType = type;
     hlP.classList.toggle('hl-active', type === 'p');
     hlM.classList.toggle('hl-active', type === 'm');
-    document.body.classList.add('hl-active-mode');
     showToast(type === 'p' ? '✦ Yellow highlighter on' : '✦ Green highlighter on');
   }
-  // Re-apply flip/zoom lock in flipbook if open
-  if (window._fbUpdateFlipLock) window._fbUpdateFlipLock();
 }
 
 document.getElementById('hl-p').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('p'); });
@@ -601,32 +565,6 @@ function showToast(msg) {
   setTimeout(() => toast.classList.remove('visible'), 3000);
 }
 window.showToast = showToast;
-// ── Read Mode button ──────────────────────────────────
-document.getElementById('btn-read-mode').addEventListener('click', () => {
-  if (pdfMode) return;
-  const tp = getSelectedTopic();
-  const ch = getChapter(selectedChapterId);
-  if (!tp) { showToast('Select a topic first'); return; }
-  if (!tp.sections || tp.sections.every(s => !(s.content && s.content.trim()))) {
-    showToast('No content yet — write something first'); return;
-  }
-  const allTopics = ch ? ch.topics.map(t => ({
-    id: t.id, name: t.name, chapterName: ch.name, sections: t.sections || []
-  })) : [{ id: tp.id, name: tp.name, chapterName: '', sections: tp.sections || [] }];
-  const startIndex = allTopics.findIndex(t => t.id === tp.id);
-  if (window._openBookFlipbookViewer) {
-    document.getElementById('pageCard').classList.add('fb-active');
-    window._openBookFlipbookViewer(allTopics, startIndex >= 0 ? startIndex : 0, bookName);
-  }
-});
 
-// Hide read button in PDF mode
-const _origSetPDFTopbarVisible = setPDFTopbarVisible;
-window.setPDFTopbarVisible = function(show) {
-  _origSetPDFTopbarVisible(show);
-  const rb = document.getElementById('btn-read-mode');
-  if (rb) rb.style.display = show ? 'none' : '';
-};
 // ── Init ──────────────────────────────────────────────
-
 renderTree(); renderPage(); renderHomepage(); updateHL();

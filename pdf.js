@@ -28,35 +28,43 @@ function setPDFTopbarVisible(show) {
 
 async function openPDFViewer(book) {
   pdfViewerBook = book; pdfMode = true; pdfCurrentPage = 1;
-  const homepage    = document.getElementById('homepage');
+  const homepage = document.getElementById('homepage');
   const editorShell = document.getElementById('editor-shell');
-  homepage.classList.add('hidden');
-  editorShell.classList.add('visible');  // keep visible so sidebars work
-  // Signal doc-area to go full-width for PDF scroll mode
-  const docArea = document.querySelector('.doc-area');
-  if (docArea) docArea.classList.add('pdf-scroll-mode');
+  homepage.classList.add('hidden'); editorShell.classList.add('visible');
   document.getElementById('sidebarBookTitle').textContent = book.name;
   setPDFTopbarVisible(true);
   document.getElementById('sectionsContainer').innerHTML = '';
   document.getElementById('editor').style.display = 'none';
   document.getElementById('pageTitleBar').style.display = 'none';
-  updatePDFHighlightSidebar();
-  swRunning = false; swStart = null; clearInterval(swTimer);
-  swStartStop.textContent = '▶'; swElapsed = 0; swDisplay.textContent = '00:00';
+  const pageCard = document.getElementById('pageCard');
+  pageCard.style.cssText = 'padding:0;border:none;background:transparent;box-shadow:none;backdrop-filter:none;border-radius:0;max-width:100%;width:100%;display:flex;flex-direction:column;align-items:center;';
+  let pdfArea = document.getElementById('pdfCanvasArea');
+  if (!pdfArea) {
+    pdfArea = document.createElement('div'); pdfArea.id = 'pdfCanvasArea';
+    pdfArea.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:20px;padding:24px 8px 60px;min-height:100%;width:100%;';
+    pageCard.appendChild(pdfArea);
+  }
+  pdfArea.innerHTML = '<div id="pdfLoadMsg" style="font-family:sans-serif;font-size:13px;color:#9a8a6a;padding:60px 24px;text-align:center;">Loading PDF…</div>';
+  document.getElementById('pdfZoomSelect').onchange = function() { if (!pdfViewerDoc) return; pdfViewerScale = parseFloat(this.value); renderAllPDFPagesInEditor(pdfViewerDoc, pdfViewerScale); };
+  document.getElementById('pdfCaptureBtn').onclick = capturePDFVisibleArea;
 
   loadPDFJS(async () => {
     try {
-      showToast('⏳ Loading PDF…');
-      const base64 = await loadPdfFromStorage(book.id);
-      if (!base64) { showToast('❌ PDF not found. Please re-import.'); return; }
+      let base64 = book.pdfBase64;
+      if (!base64) { document.getElementById('pdfLoadMsg').textContent = '⏳ Downloading from cloud…'; base64 = await loadPdfFromStorage(book.id); if (base64) book.pdfBase64 = base64; }
+      if (!base64) { document.getElementById('pdfLoadMsg').textContent = '❌ PDF not found. Please re-import.'; return; }
       const binary = atob(base64); const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      window.pdfjsLib.getDocument({ data: bytes }).promise.then(async pdf => {
-        pdfViewerDoc = pdf;
-        await buildPDFOutlineSidebar(pdf);
-        if (window._openFlipbookViewer) await window._openFlipbookViewer(book, pdf);
-      }).catch(err => showToast('❌ ' + err.message));
-    } catch(err) { showToast('❌ ' + err.message); }
+      window.pdfjsLib.getDocument({ data: bytes }).promise.then(pdf => {
+        pdfViewerDoc = pdf; pdfViewerScale = parseFloat(document.getElementById('pdfZoomSelect').value) || 1;
+        buildPDFOutlineSidebar(pdf).then(() => {
+          renderAllPDFPagesInEditor(pdf, pdfViewerScale);
+          swRunning = false; swStart = null; clearInterval(swTimer); swStartStop.textContent = '▶';
+          swElapsed = loadPDFPageTime(1); swDisplay.textContent = swFormat(swElapsed);
+          updatePDFHighlightSidebar();
+        });
+      }).catch(err => { document.getElementById('pdfLoadMsg').textContent = '❌ Error: ' + err.message; });
+    } catch(err) { document.getElementById('pdfLoadMsg').textContent = '❌ Error: ' + err.message; }
   });
 }
 
@@ -126,8 +134,6 @@ async function renderAllPDFPagesInEditor(pdf, scale) {
           if (swRunning) swStart = Date.now();
           swDisplay.textContent = swFormat(swElapsed);
           document.getElementById('pdfPageInfo').textContent = `Page ${newPage} / ${pdf.numPages}`;
-          // Update the confirm button when page changes
-          if (window.renderPDFConfirmBtn) window.renderPDFConfirmBtn();
         }
       }
     });
@@ -144,8 +150,6 @@ async function renderAllPDFPagesInEditor(pdf, scale) {
   }, { rootMargin: '300px 0px', threshold: 0 });
   window._renderObserver = renderObserver; wrappers.forEach(w => renderObserver.observe(w));
   pdfCurrentPage = wasPage || 1;
-  // Initial render of confirm button after page load/change
-  if (window.renderPDFConfirmBtn) window.renderPDFConfirmBtn();
 }
 
 async function renderSinglePage(pdf, pageNum, wrapper, scale, dpr) {
@@ -304,51 +308,15 @@ function capturePDFVisibleArea() {
   a.click(); showToast(`✓ Captured page ${best.closest('[data-page]').dataset.page}`);
 }
 
-// ── PDF "Mark as Read" Confirm Button ──────────────
-function renderPDFConfirmBtn() {
-  let btn = document.getElementById('pdfConfirmBtn');
-  if (!btn) {
-    btn = document.createElement('button');
-    btn.id = 'pdfConfirmBtn';
-    btn.style.cssText = `position:fixed;bottom:80px;right:28px;z-index:999;font-family:sans-serif;font-size:13px;padding:10px 20px;border-radius:8px;cursor:pointer;transition:all .2s;box-shadow:0 4px 18px rgba(0,0,0,0.35);`;
-    document.body.appendChild(btn);
-  }
-  if (!pdfViewerBook || pdfCurrentPage === null) { btn.style.display = 'none'; return; }
-  if (!pdfViewerBook.pageConfirmed) pdfViewerBook.pageConfirmed = {};
-  const isConfirmed = pdfViewerBook.pageConfirmed[pdfCurrentPage] === true;
-  btn.style.display = 'inline-flex';
-  btn.style.background = isConfirmed ? 'rgba(90,180,90,0.22)' : 'rgba(40,36,54,0.95)';
-  btn.style.border = `1px solid ${isConfirmed ? 'rgba(90,180,90,0.5)' : 'rgba(255,255,255,0.15)'}`;
-  btn.style.color = isConfirmed ? '#80d880' : '#c0b8d0';
-  btn.textContent = isConfirmed ? '✓ Read' : '○ Mark as Read';
-  btn.onclick = () => {
-    if (!pdfViewerBook.pageConfirmed) pdfViewerBook.pageConfirmed = {};
-    pdfViewerBook.pageConfirmed[pdfCurrentPage] = !pdfViewerBook.pageConfirmed[pdfCurrentPage];
-    saveBook(pdfViewerBook);
-    renderPDFConfirmBtn();
-    showToast(pdfViewerBook.pageConfirmed[pdfCurrentPage] ? '✓ Page marked as read' : 'Page unmarked');
-  };
-}
-
-window.renderPDFConfirmBtn = renderPDFConfirmBtn;
-
 // Clean up PDF mode on home
 document.getElementById('homeLink').addEventListener('click', () => {
   if (!pdfMode) return;
   if (swRunning) savePDFPageTime();
-  const docArea = document.querySelector('.doc-area');
-  if (docArea) docArea.classList.remove('pdf-scroll-mode'); pdfViewerDoc = null; pdfCurrentPage = null;
+  pdfMode = false; pdfViewerDoc = null; pdfCurrentPage = null;
   setPDFTopbarVisible(false);
   const pageCard = document.getElementById('pageCard'); pageCard.removeAttribute('style');
   const pdfArea = document.getElementById('pdfCanvasArea'); if (pdfArea) pdfArea.remove();
   document.getElementById('editor').style.display = '';
-  const pdfBtn = document.getElementById('pdfConfirmBtn');
-  if (pdfBtn) pdfBtn.style.display = 'none';
-  // Ensure editor-shell is hidden (was hidden before flipbook opened)
-  const editorShell = document.getElementById('editor-shell');
-  if (editorShell) editorShell.classList.remove('visible');
-  // Close flipbook shell if open (skipHomeClick=true to avoid recursion)
-  if (window._closeFlipbookViewer) window._closeFlipbookViewer(true);
 }, true);
 
 window.openPDFViewer = openPDFViewer;
