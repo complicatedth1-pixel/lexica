@@ -248,6 +248,7 @@ CRITICAL OUTPUT RULES:
 6. 150-400 words of actual teaching content per section (not counting revision box).
 7. Every factual claim needs a clickable <a href="url" target="_blank">Source</a> inline.
 8. No inline styles except on the master revision-box. No <style> tags. No <script> tags.
+8.5. output must be in a html file.
 9. Output nothing outside the <div class="lesson-content"> — no extra HTML, no comments outside section markers.`;
 }
 
