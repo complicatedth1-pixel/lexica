@@ -36,7 +36,7 @@ function applyPreciseHighlight(color, type) {
       if (end < node.textContent.length) node.splitText(end);
       const mid = (start > 0) ? node.splitText(start) : node;
       const span = document.createElement('span');
-      span.className = type === 'p' ? 'hl-span-p' : 'hl-span-m';
+      span.className = type === 'p' ? 'hl-span-p' : type === 'm' ? 'hl-span-m' : 'hl-span-f';
       span.style.background = color;
       span.style.borderRadius = '2px';
       mid.parentNode.insertBefore(span, mid);
@@ -154,17 +154,19 @@ function getSelectedTextNodes(range) {
 
 // ── Scan DOM for highlight spans ──────────────────────
 function getHL() {
-  const p = [], m = [];
+  const p = [], m = [], f = [];
   document.querySelectorAll('.section-editor, #editor').forEach(container => {
-    container.querySelectorAll('span.hl-span-p, span.hl-span-m, [style*="background"]').forEach(el => {
+    container.querySelectorAll('span.hl-span-p, span.hl-span-m, span.hl-span-f, [style*="background"]').forEach(el => {
       const text = el.textContent.trim(); if (!text) return;
       const isP = el.classList.contains('hl-span-p') || (el.style.backgroundColor && (el.style.backgroundColor.includes('255,229,102') || el.style.backgroundColor.includes('255,215,0')));
       const isM = el.classList.contains('hl-span-m') || (el.style.backgroundColor && (el.style.backgroundColor.includes('125,219,125') || el.style.backgroundColor.includes('80,200,80')));
+      const isF = el.classList.contains('hl-span-f') || (el.style.backgroundColor && (el.style.backgroundColor.includes('167,139,250') || el.style.backgroundColor.includes('139,92,246')));
       if (isP) p.push({ text, el });
       else if (isM) m.push({ text, el });
+      else if (isF) f.push({ text, el });
     });
   });
-  return { p, m };
+  return { p, m, f };
 }
 
 function scrollToHL(el) {
@@ -188,9 +190,12 @@ function renderList(id, items, type) {
 
 function updateHL() {
   if (pdfMode) { updatePDFHighlightSidebar(); return; }
-  const { p, m } = getHL();
+  const { p, m, f } = getHL();
   renderList('hl-list-p', p, 'p');
   renderList('hl-list-m', m, 'm');
+  // F list rendered in right panel if element exists
+  const flList = document.getElementById('hl-list-f');
+  if (flList) renderList('hl-list-f', f, 'f');
 }
 
 new MutationObserver(updateHL).observe(document.getElementById('pageCard'), {
@@ -218,10 +223,11 @@ function closeHighlightsPage() { document.getElementById('highlightsPage').style
 function setHlFilterBtn(type) {
   ['hlFilterAll','hlFilterP','hlFilterM'].forEach(id => {
     const el = document.getElementById(id);
-    el.style.background = 'transparent'; el.style.color = 'var(--cream2)'; el.style.border = '1px solid var(--border-color)';
+    if (el) { el.style.background = 'transparent'; el.style.color = 'var(--cream2)'; el.style.border = '1px solid var(--border-color)'; }
   });
   const map = { all:'hlFilterAll', p:'hlFilterP', m:'hlFilterM' };
   const el = document.getElementById(map[type]);
+  if (!el) return;
   el.style.background = type === 'm' ? 'rgba(106,223,106,0.2)' : 'var(--amber)';
   el.style.color = type === 'm' ? '#6adf6a' : 'var(--ink)'; el.style.border = 'none';
 }
@@ -229,25 +235,29 @@ function setHlFilterBtn(type) {
 function filterHighlights(type) { _hlFilter = type; setHlFilterBtn(type); renderHighlightsPage(); }
 
 function extractHighlightsFromBook(book) {
-  const pItems = [], mItems = [];
+  const pItems = [], mItems = [], fItems = [];
   (book.treeData || []).forEach(ch => {
     (ch.topics || []).forEach(tp => {
       (tp.sections || []).forEach(sec => {
         if (!sec.content) return;
         const tmp = document.createElement('div'); tmp.innerHTML = sec.content;
-        tmp.querySelectorAll('span.hl-span-p, span.hl-span-m').forEach(el => {
+        tmp.querySelectorAll('span.hl-span-p, span.hl-span-m, span.hl-span-f').forEach(el => {
           const text = el.textContent.trim(); if (!text) return;
           const it = { text, bookName: book.name, loc: tp.name };
-          (el.classList.contains('hl-span-p') ? pItems : mItems).push(it);
+          if (el.classList.contains('hl-span-p')) pItems.push(it);
+          else if (el.classList.contains('hl-span-m')) mItems.push(it);
+          else if (el.classList.contains('hl-span-f')) fItems.push(it);
         });
         tmp.querySelectorAll('[style*="background"]').forEach(el => {
-          if (el.classList.contains('hl-span-p') || el.classList.contains('hl-span-m')) return;
+          if (el.classList.contains('hl-span-p') || el.classList.contains('hl-span-m') || el.classList.contains('hl-span-f')) return;
           const text = el.textContent.trim(); if (!text) return;
           const bg = el.style.backgroundColor || '';
           const isP = bg.includes('255,229,102') || bg.includes('255,215,0');
           const isM = bg.includes('125,219,125') || bg.includes('80,200,80');
+          const isF = bg.includes('167,139,250') || bg.includes('139,92,246');
           if (isP) pItems.push({ text, bookName: book.name, loc: tp.name });
           else if (isM) mItems.push({ text, bookName: book.name, loc: tp.name });
+          else if (isF) fItems.push({ text, bookName: book.name, loc: tp.name });
         });
       });
     });
@@ -257,11 +267,13 @@ function extractHighlightsFromBook(book) {
       if (!Array.isArray(hls)) return;
       hls.forEach(hl => {
         const it = { text: hl.text || '', bookName: book.name, loc: 'Page ' + pg };
-        (hl.type === 'p' ? pItems : mItems).push(it);
+        if (hl.type === 'p') pItems.push(it);
+        else if (hl.type === 'm') mItems.push(it);
+        else if (hl.type === 'f') fItems.push(it);
       });
     });
   }
-  return { pItems, mItems };
+  return { pItems, mItems, fItems };
 }
 
 function renderHighlightsPage() {
@@ -298,9 +310,55 @@ function renderHlGrid(id, items, type) {
   });
 }
 
+// ── Facts Page ────────────────────────────────────────
+function openFactsPage() {
+  const sel = document.getElementById('factsPageBookSelect');
+  sel.innerHTML = '<option value="all">All Books</option>';
+  window.library.forEach(b => {
+    const o = document.createElement('option');
+    o.value = b.id;
+    o.textContent = b.name.length > 30 ? b.name.substring(0,28) + '…' : b.name;
+    o.title = b.name;
+    sel.appendChild(o);
+  });
+  document.getElementById('factsPage').style.display = 'block';
+  renderFactsPage();
+}
+
+function closeFactsPage() { document.getElementById('factsPage').style.display = 'none'; }
+
+function renderFactsPage() {
+  const bookId = document.getElementById('factsPageBookSelect').value;
+  const books = bookId === 'all' ? window.library : window.library.filter(b => b.id === bookId);
+  let allF = [];
+  books.forEach(book => { const { fItems } = extractHighlightsFromBook(book); allF = allF.concat(fItems); });
+  document.getElementById('factsPageFCount').textContent = '(' + allF.length + ')';
+  renderFactsGrid('factsPageFList', allF);
+}
+
+function renderFactsGrid(id, items) {
+  const c = document.getElementById(id);
+  if (!items.length) { c.innerHTML = '<div style="color:var(--cream2);font-size:14px;padding:1rem 0;font-style:italic;">No F facts yet. Use the ✦ F highlighter to mark facts.</div>'; return; }
+  c.innerHTML = '';
+  items.forEach(item => {
+    const d = document.createElement('div');
+    d.style.cssText = 'background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.3);border-radius:5px;padding:0.9rem 1rem;';
+    const shortName = item.bookName.length > 20 ? item.bookName.substring(0,18)+'…' : item.bookName;
+    d.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;gap:0.5rem;">'
+      + '<span style="font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#a78bfa;flex-shrink:0;">F</span>'
+      + `<span style="font-size:10px;color:var(--cream2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%;text-align:right;" title="${escHtml(item.bookName)}${item.loc ? ' · ' + escHtml(item.loc) : ''}">${escHtml(shortName)}${item.loc ? ' · ' + escHtml(item.loc) : ''}</span>`
+      + '</div>'
+      + `<div style="font-size:13px;color:var(--cream);line-height:1.65;font-family:'Lora',serif;word-break:break-word;">${escHtml(item.text.substring(0,280))}${item.text.length > 280 ? '…' : ''}</div>`;
+    c.appendChild(d);
+  });
+}
+
 window.openHighlightsPage = openHighlightsPage;
 window.closeHighlightsPage = closeHighlightsPage;
 window.filterHighlights = filterHighlights;
 window.renderHighlightsPage = renderHighlightsPage;
 window.applyPreciseHighlight = applyPreciseHighlight;
 window.updateHL = updateHL;
+window.openFactsPage = openFactsPage;
+window.closeFactsPage = closeFactsPage;
+window.renderFactsPage = renderFactsPage;

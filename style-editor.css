@@ -125,6 +125,8 @@
 .eo-hl.hl-p:hover { background: #ffd000; }
 .eo-hl.hl-m { background: #7ddb7d; color: #1a3d1a; }
 .eo-hl.hl-m:hover { background: #50c850; }
+.eo-hl.hl-f { background: #a78bfa; color: #1a0d3d; }
+.eo-hl.hl-f:hover { background: #8b5cf6; }
 .eo-icon-btn { background: none; border: none; color: #554e68; cursor: pointer; font-size: 14px; padding: 2px 5px; border-radius: 4px; transition: color 0.15s, background 0.15s; }
 .eo-icon-btn:hover { color: #c0b8d0; background: rgba(255,255,255,0.06); }
 
@@ -139,10 +141,12 @@
 .hl-card { border-radius: 6px; padding: 7px 10px; margin-bottom: 6px; }
 .hl-card-p { background: rgba(255,229,102,0.12); border: 1px solid rgba(255,200,0,0.2); }
 .hl-card-m { background: rgba(125,219,125,0.1); border: 1px solid rgba(80,200,80,0.18); }
+.hl-card-f { background: rgba(167,139,250,0.1); border: 1px solid rgba(139,92,246,0.2); }
 .hl-card-text { font-size: 11px; font-family: var(--font); line-height: 1.5; color: #c0b8d0; display: -webkit-box; -webkit-line-clamp: 3;line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .hl-card-badge { display: inline-block; font-size: 9px; font-family: sans-serif; font-weight: 700; letter-spacing: 0.08em; border-radius: 10px; padding: 1px 7px; margin-bottom: 5px; }
 .badge-p { background: #ffe566; color: #5a4200; }
 .badge-m { background: #7ddb7d; color: #1a3d1a; }
+.badge-f { background: #a78bfa; color: #1a0d3d; }
 .hl-empty { font-size: 11px; font-family: sans-serif; color: #443d58; font-style: italic; line-height: 1.6; padding: 4px 0; }
 .hl-card-clickable { cursor: pointer; transition: opacity 0.15s, transform 0.15s; }
 .hl-card-clickable:hover { opacity: 0.82; transform: translateX(2px); }
@@ -216,6 +220,7 @@
 /* ── HIGHLIGHT SPANS ── */
 .hl-span-p { background: rgba(255,229,102,0.6); border-radius: 2px; }
 .hl-span-m { background: rgba(125,219,125,0.6); border-radius: 2px; }
+.hl-span-f { background: rgba(167,139,250,0.6); border-radius: 2px; }
 
 /* ── PDF TEXT LAYER ── */
 .textLayer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; opacity: 1; line-height: 1; user-select: text; -webkit-user-select: text; pointer-events: auto; }

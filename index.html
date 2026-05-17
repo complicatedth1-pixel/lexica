@@ -57,6 +57,7 @@
         <a href="#collections" id="nav-collections">Library</a>
         <a href="#" id="nav-analytics" onclick="openAnalytics();return false;">Analytics</a>
         <a href="#" id="nav-highlights" onclick="openHighlightsPage();return false;">Highlights</a>
+        <a href="#" id="nav-facts" onclick="openFactsPage();return false;">Facts</a>
       </ul>
       <button class="theme-toggle" id="themeToggle" title="Toggle theme"></button>
     </div>
@@ -237,6 +238,7 @@
     <div class="topbar-sep"></div>
     <button class="eo-hl hl-p" id="hl-p">✦ P</button>
     <button class="eo-hl hl-m" id="hl-m">✦ M</button>
+    <button class="eo-hl hl-f" id="hl-f">✦ F</button>
     <div class="topbar-sep"></div>
     <button class="eo-btn" id="btn-link">Link</button>
     <button class="eo-icon-btn" id="btn-undo">↩</button>
@@ -430,6 +432,32 @@
     </div>
   </div>
 </div>
+
+<!-- FACTS PAGE -->
+<div id="factsPage" style="position:fixed;inset:0;z-index:150;overflow-y:auto;background:var(--ink);display:none;scrollbar-width:thin;-webkit-overflow-scrolling:touch;">
+  <div style="padding:1rem 1.4rem;background:var(--ink);border-bottom:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:20;backdrop-filter:blur(16px);gap:1rem;flex-wrap:wrap;">
+    <div class="logo-text">LEXICA<sup>✦</sup></div>
+    <button onclick="closeFactsPage()" style="background:transparent;border:1px solid var(--border-color);color:var(--cream2);font-family:'Outfit',sans-serif;font-size:12px;letter-spacing:1px;text-transform:uppercase;padding:0.5rem 1rem;border-radius:2px;cursor:pointer;min-height:40px;">← Back</button>
+  </div>
+  <div style="padding:2.5rem 1.4rem 1.5rem;border-bottom:1px solid var(--border-color);">
+    <div style="font-size:10px;letter-spacing:4px;text-transform:uppercase;color:#a78bfa;margin-bottom:0.8rem;font-weight:500;">✦ Your facts</div>
+    <h1 style="font-family:'Cormorant Garamond',serif;font-size:clamp(36px,8vw,56px);font-weight:300;color:var(--cream);line-height:1.1;">Your <em style="font-style:italic;color:#a78bfa;">Facts</em></h1>
+    <p style="font-size:13px;color:var(--cream2);margin-top:0.8rem;font-weight:300;">All F highlights across every book and PDF.</p>
+  </div>
+  <div style="padding:1.5rem 1.4rem;">
+    <div style="margin-bottom:1.5rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+      <label style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--cream2);">Book</label>
+      <select id="factsPageBookSelect" onchange="renderFactsPage()" style="background:var(--glass2);border:1px solid var(--border-color);color:var(--cream);font-family:'Outfit',sans-serif;font-size:13px;padding:0.5rem 0.8rem;border-radius:3px;outline:none;cursor:pointer;min-height:40px;max-width:200px;"></select>
+    </div>
+    <div id="factsPageFSection">
+      <div style="font-family:'Cormorant Garamond',serif;font-size:clamp(20px,4vw,26px);font-weight:400;color:var(--cream);margin-bottom:1rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border-color);">F Facts <span id="factsPageFCount" style="font-size:16px;color:#a78bfa;"></span></div>
+      <div id="factsPageFList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-bottom:2.5rem;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MARK AS READ FLOATING BUTTON -->
+<button id="markReadBtn" onclick="toggleMarkRead()" title="Mark as Read" style="display:none;position:fixed;right:-1px;top:50%;transform:translateY(-50%);z-index:100;writing-mode:vertical-rl;text-orientation:mixed;background:var(--glass2);border:1px solid var(--border-color);border-right:none;color:var(--cream2);font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;padding:1rem 0.5rem;border-radius:4px 0 0 4px;cursor:pointer;transition:all 0.2s;min-height:80px;backdrop-filter:blur(8px);">✓ Read</button>
 
 <!-- SCRIPTS (order matters) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

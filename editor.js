@@ -228,12 +228,22 @@ function renderPage() {
   const titleBar = document.getElementById('pageTitleBar'), topicLabel = document.getElementById('pageTopicLabel');
   const chapterLabel = document.getElementById('pageChapterLabel'), pageProgress = document.getElementById('pageProgress');
   const tp = getSelectedTopic();
-  if (!tp) { container.innerHTML = ''; plainEditor.style.display = 'block'; titleBar.style.display = 'none'; updateWordCount(); return; }
+  if (!tp) { container.innerHTML = ''; plainEditor.style.display = 'block'; titleBar.style.display = 'none'; const markBtn = document.getElementById('markReadBtn'); if (markBtn) markBtn.style.display = 'none'; updateWordCount(); return; }
   const ch = getChapter(selectedChapterId);
   plainEditor.style.display = 'none'; titleBar.style.display = 'block';
   topicLabel.textContent = tp.name; chapterLabel.textContent = ch ? '— ' + ch.name : '';
   if (!swRunning) { swElapsed = tp.timeSpent || 0; swSessionElapsed = 0; swDisplay.textContent = swElapsed > 0 ? swFormat(swElapsed) : '00:00'; }
   if (ch && ch.topics) { const pn = ch.topics.findIndex(t => t.id === tp.id) + 1; pageProgress.textContent = `Page ${pn} of ${ch.topics.length}`; }
+  // Show mark-as-read button and set its state
+  const markBtn = document.getElementById('markReadBtn');
+  if (markBtn) {
+    markBtn.style.display = 'block';
+    const isRead = tp.isRead || false;
+    markBtn.textContent = isRead ? '✓ Read' : '○ Read';
+    markBtn.style.background = isRead ? 'rgba(106,223,106,0.25)' : 'var(--glass2)';
+    markBtn.style.color = isRead ? '#6adf6a' : 'var(--cream2)';
+    markBtn.style.borderColor = isRead ? 'rgba(106,223,106,0.5)' : 'var(--border-color)';
+  }
   if (!tp.sections) tp.sections = [];
   if (tp.sections.length === 0) { container.innerHTML = `<div style="padding:20px 0;text-align:center;font-family:sans-serif;font-size:13px;color:#a09080;font-style:italic;">No sections yet. Click <strong style="color:#c0b8d0;">⊞ Sections</strong> to add sections.</div>`; updateWordCount(); return; }
   container.innerHTML = '';
@@ -392,6 +402,7 @@ document.getElementById('uploadChapterFile').addEventListener('change', function
       if (!pageEls.length) { status.textContent = '❌ No page elements found'; status.style.color = '#ff7070'; return; }
       const ch = { id: uid(), name: chName, open: true, topics: pageEls.map(p => { const name = p.textContent.trim().split('\n')[0].trim(); const sectionEls = Array.from(p.querySelectorAll('.section')).sort((a,b) => parseFloat(a.getAttribute('order')||0)-parseFloat(b.getAttribute('order')||0)); return { id: uid(), name, sections: sectionEls.map(s => ({ id: uid(), title: s.textContent.trim(), content: '', open: true })) }; }) };
       treeData.push(ch); selectedChapterId = ch.id; selectedTopicId = null; saveAll(); renderTree(); renderPage();
+      saveLibrary().then(() => showToast(`✓ Index saved — "${chName}" with ${ch.topics.length} pages`)).catch(() => showToast(`✓ Index saved locally — "${chName}"`));
       status.textContent = `✓ Created "${chName}" with ${ch.topics.length} topics.`; status.style.color = '#90dba0'; uploadChapterModal.classList.remove('open');
     } catch(err) { status.textContent = '❌ Error: ' + err.message; status.style.color = '#ff7070'; }
   };
@@ -449,7 +460,9 @@ document.getElementById('uploadPageFile').addEventListener('change', function() 
         sectionEls.forEach(secEl => { const dt = secEl.getAttribute('data-title'); const sec = tp.sections.find(s => s.title.trim().toLowerCase() === (dt||'').trim().toLowerCase()); if (sec) { sec.content = secEl.innerHTML; filled++; } });
         if (filled === 0) sectionEls.forEach((secEl, i) => { if (tp.sections[i]) { tp.sections[i].content = secEl.innerHTML; filled++; } });
       }
-      saveAll(); renderPage(); renderTree(); status.textContent = `✓ Filled ${filled} section(s).`; status.style.color = '#90dba0'; uploadPageModal.classList.remove('open');
+      saveAll(); renderPage(); renderTree();
+      saveLibrary().then(() => showToast(`✓ Page content saved — ${filled} section(s) filled`)).catch(() => showToast(`✓ Page saved locally — ${filled} section(s)`));
+      status.textContent = `✓ Filled ${filled} section(s).`; status.style.color = '#90dba0'; uploadPageModal.classList.remove('open');
     } catch(err) { status.textContent = '❌ Error: ' + err.message; status.style.color = '#ff7070'; }
   };
   reader.readAsText(file); this.value = '';
@@ -491,34 +504,39 @@ document.getElementById('btn-redo').addEventListener('mousedown', e => { e.preve
 editor.addEventListener('click', e => { const a = e.target.closest('a'); if (a && a.href) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); } });
 
 // Highlight buttons
-let activeHlType = null; // 'p', 'm', or null
+let activeHlType = null; // 'p', 'm', 'f', or null
 
 function setActiveHighlighter(type) {
   const hlP = document.getElementById('hl-p');
   const hlM = document.getElementById('hl-m');
+  const hlF = document.getElementById('hl-f');
   if (activeHlType === type) {
     // Toggle off
     activeHlType = null;
     hlP.classList.remove('hl-active');
     hlM.classList.remove('hl-active');
+    hlF.classList.remove('hl-active');
     showToast('Highlighter off');
   } else {
     activeHlType = type;
     hlP.classList.toggle('hl-active', type === 'p');
     hlM.classList.toggle('hl-active', type === 'm');
-    showToast(type === 'p' ? '✦ Yellow highlighter on' : '✦ Green highlighter on');
+    hlF.classList.toggle('hl-active', type === 'f');
+    const label = type === 'p' ? '✦ Yellow highlighter on' : type === 'm' ? '✦ Green highlighter on' : '✦ Purple (Facts) highlighter on';
+    showToast(label);
   }
 }
 
 document.getElementById('hl-p').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('p'); });
 document.getElementById('hl-m').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('m'); });
+document.getElementById('hl-f').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('f'); });
 
 // Auto-highlight on mouseup / touchend when a highlighter is active
 document.addEventListener('mouseup', e => {
   if (!activeHlType) return;
   const sel = window.getSelection();
   if (!sel || sel.isCollapsed) return;
-  const color = activeHlType === 'p' ? '#ffe566' : '#7ddb7d';
+  const color = activeHlType === 'p' ? '#ffe566' : activeHlType === 'm' ? '#7ddb7d' : '#a78bfa';
   if (pdfMode && pdfCurrentPage !== null) applyHighlightToPDF(color, activeHlType);
   else applyPreciseHighlight(color, activeHlType);
 });
@@ -528,7 +546,7 @@ document.addEventListener('touchend', e => {
   setTimeout(() => {
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed) return;
-    const color = activeHlType === 'p' ? '#ffe566' : '#7ddb7d';
+    const color = activeHlType === 'p' ? '#ffe566' : activeHlType === 'm' ? '#7ddb7d' : '#a78bfa';
     if (pdfMode && pdfCurrentPage !== null) applyHighlightToPDF(color, activeHlType);
     else applyPreciseHighlight(color, activeHlType);
   }, 100);
@@ -565,6 +583,23 @@ function showToast(msg) {
   setTimeout(() => toast.classList.remove('visible'), 3000);
 }
 window.showToast = showToast;
+
+// ── Mark as Read ──────────────────────────────────────
+function toggleMarkRead() {
+  const tp = getSelectedTopic(); if (!tp) return;
+  tp.isRead = !tp.isRead;
+  saveAll();
+  const markBtn = document.getElementById('markReadBtn');
+  if (markBtn) {
+    markBtn.textContent = tp.isRead ? '✓ Read' : '○ Read';
+    markBtn.style.background = tp.isRead ? 'rgba(106,223,106,0.25)' : 'var(--glass2)';
+    markBtn.style.color = tp.isRead ? '#6adf6a' : 'var(--cream2)';
+    markBtn.style.borderColor = tp.isRead ? 'rgba(106,223,106,0.5)' : 'var(--border-color)';
+  }
+  renderTree();
+  showToast(tp.isRead ? '✓ Marked as read' : '○ Marked as unread');
+}
+window.toggleMarkRead = toggleMarkRead;
 
 // ── Init ──────────────────────────────────────────────
 renderTree(); renderPage(); renderHomepage(); updateHL();

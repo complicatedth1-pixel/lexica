@@ -82,11 +82,21 @@ document.getElementById('chapterList').addEventListener('click', e => {
       saveStopwatchToTopic();
       clearInterval(swTimer); swRunning = false; swStart = null; swSessionElapsed = 0;
       swStartStop.textContent = '▶'; swDisplay.classList.remove('running');
+      swElapsed = 0; swDisplay.textContent = '00:00';
+      // Load time for the newly selected topic after selection is committed
       setTimeout(() => {
         const newTp = getSelectedTopic();
-        swElapsed = (newTp && newTp.timeSpent) ? newTp.timeSpent : 0;
+        // Fallback: search all chapters if getSelectedTopic returns old topic
+        let found = newTp;
+        if (!found || found.id !== tid) {
+          for (const ch of (treeData || [])) {
+            const t = (ch.topics||[]).find(t => t.id === tid);
+            if (t) { found = t; break; }
+          }
+        }
+        swElapsed = (found && found.timeSpent) ? found.timeSpent : 0;
         swDisplay.textContent = swElapsed > 0 ? swFormat(swElapsed) : '00:00';
-      }, 50);
+      }, 100);
     }
   }
 }, true);
