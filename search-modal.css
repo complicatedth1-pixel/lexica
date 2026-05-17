@@ -20,13 +20,13 @@
   --srm-green:       #6adf6a;
   --srm-green-dim:   rgba(106,223,106,0.13);
   --srm-muted:       rgba(200,184,160,0.38);
-  --srm-radius:      14px;
-  --srm-radius-sm:   8px;
-  --srm-shadow:      0 40px 100px rgba(0,0,0,0.85), 0 0 0 1px rgba(212,135,42,0.13);
-  --srm-t:           0.22s cubic-bezier(0.4,0,0.2,1);
-  --srm-tab-h:       34px;
-  --srm-header-h:    48px;
-  --srm-footer-h:    30px;
+  --srm-radius:      12px;
+  --srm-radius-sm:   7px;
+  --srm-shadow:      0 32px 80px rgba(0,0,0,0.82), 0 0 0 1px rgba(212,135,42,0.13);
+  --srm-t:           0.2s cubic-bezier(0.4,0,0.2,1);
+  --srm-tab-h:       32px;
+  --srm-header-h:    44px;
+  --srm-footer-h:    28px;
 }
 
 /* ── Overlay backdrop ─────────────────────────────────────────────── */
@@ -37,10 +37,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
-  background: rgba(6,4,12,0.76);
-  backdrop-filter: blur(12px) saturate(0.65);
-  -webkit-backdrop-filter: blur(12px) saturate(0.65);
+  padding: 20px;
+  background: rgba(6,4,12,0.72);
+  backdrop-filter: blur(10px) saturate(0.6);
+  -webkit-backdrop-filter: blur(10px) saturate(0.6);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--srm-t);
@@ -50,19 +50,20 @@
   pointer-events: all;
 }
 
-/* ── Modal box ────────────────────────────────────────────────────── */
+/* ── Modal box — smaller, tighter ────────────────────────────────── */
 #srm-box {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(1020px, calc(100vw - 32px));
-  height: min(88vh, 860px);
+  /* Reduced from 1020×88vh to something more contained */
+  width: min(820px, calc(100vw - 40px));
+  height: min(72vh, 680px);
   background: var(--srm-bg);
   border: 1px solid var(--srm-border);
   border-radius: var(--srm-radius);
   box-shadow: var(--srm-shadow);
   overflow: hidden;
-  transform: translateY(12px) scale(0.982);
+  transform: translateY(10px) scale(0.984);
   transition: transform var(--srm-t);
 }
 #srm-overlay.open #srm-box {
@@ -74,8 +75,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 0 14px 0 16px;
+  gap: 8px;
+  padding: 0 12px 0 14px;
   height: var(--srm-header-h);
   background: var(--srm-surface);
   border-bottom: 1px solid var(--srm-border2);
@@ -84,12 +85,12 @@
 #srm-header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex: 1;
   min-width: 0;
 }
 #srm-icon {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--srm-amber);
   opacity: 0.85;
   flex-shrink: 0;
@@ -104,14 +105,14 @@
   min-width: 0;
   background: var(--srm-bg);
   border: 1px solid var(--srm-border2);
-  border-radius: 20px;
-  padding: 0 6px 0 12px;
+  border-radius: 18px;
+  padding: 0 5px 0 11px;
   gap: 4px;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 #srm-addressbar-wrap:focus-within {
   border-color: rgba(212,135,42,0.4);
-  box-shadow: 0 0 0 3px rgba(212,135,42,0.07);
+  box-shadow: 0 0 0 2px rgba(212,135,42,0.07);
 }
 #srm-addressbar {
   flex: 1;
@@ -120,10 +121,10 @@
   border: none;
   outline: none;
   font-family: 'Outfit', sans-serif;
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--srm-cream);
   letter-spacing: 0.01em;
-  height: 30px;
+  height: 28px;
   caret-color: var(--srm-amber);
 }
 #srm-addressbar::placeholder { color: var(--srm-muted); }
@@ -134,9 +135,9 @@
   background: var(--srm-amber-dim);
   border: 1px solid rgba(212,135,42,0.2);
   color: var(--srm-amber);
-  width: 26px;
-  height: 22px;
-  border-radius: 12px;
+  width: 24px;
+  height: 20px;
+  border-radius: 10px;
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.15s;
@@ -146,41 +147,31 @@
 #srm-header-right {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   flex-shrink: 0;
 }
-#srm-btn-newtab-ext {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: 1px solid transparent;
-  color: var(--srm-muted);
-  width: 28px;
-  height: 28px;
-  border-radius: var(--srm-radius-sm);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-#srm-btn-newtab-ext:hover {
-  background: var(--srm-amber-dim);
-  border-color: rgba(212,135,42,0.25);
-  color: var(--srm-amber);
-}
+#srm-btn-newtab-ext,
 #srm-btn-close {
   display: flex;
   align-items: center;
   justify-content: center;
   background: none;
   border: 1px solid transparent;
-  color: var(--srm-cream2);
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: var(--srm-radius-sm);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
+#srm-btn-newtab-ext {
+  color: var(--srm-muted);
+}
+#srm-btn-newtab-ext:hover {
+  background: var(--srm-amber-dim);
+  border-color: rgba(212,135,42,0.25);
+  color: var(--srm-amber);
+}
+#srm-btn-close { color: var(--srm-cream2); }
 #srm-btn-close:hover {
   background: rgba(255,80,80,0.12);
   border-color: rgba(255,80,80,0.18);
@@ -214,19 +205,19 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 0 8px 0 10px;
-  height: 28px;
+  padding: 0 7px 0 9px;
+  height: 26px;
   background: var(--srm-surface2);
   border: 1px solid var(--srm-border2);
   border-bottom: 1px solid var(--srm-surface);
-  border-radius: 6px 6px 0 0;
+  border-radius: 5px 5px 0 0;
   font-family: 'Outfit', sans-serif;
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--srm-muted);
   white-space: nowrap;
   cursor: pointer;
-  min-width: 80px;
-  max-width: 180px;
+  min-width: 72px;
+  max-width: 160px;
   flex-shrink: 1;
   transition: background 0.12s, color 0.12s;
   position: relative;
@@ -244,8 +235,8 @@
   z-index: 1;
 }
 .srm-tab-favicon {
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
   border-radius: 2px;
   background: var(--srm-amber-dim);
   flex-shrink: 0;
@@ -256,7 +247,7 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 11px;
+  font-size: 10.5px;
 }
 .srm-tab-close {
   display: flex;
@@ -265,8 +256,8 @@
   background: none;
   border: none;
   color: var(--srm-muted);
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   border-radius: 3px;
   cursor: pointer;
   flex-shrink: 0;
@@ -288,9 +279,9 @@
   background: none;
   border: 1px solid transparent;
   color: var(--srm-muted);
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
   cursor: pointer;
   flex-shrink: 0;
   margin-bottom: 1px;
@@ -318,58 +309,68 @@
   width: 0%;
   background: linear-gradient(90deg, var(--srm-amber) 0%, #f0b060 100%);
   border-radius: 0 2px 2px 0;
-  box-shadow: 0 0 8px rgba(212,135,42,0.65);
+  box-shadow: 0 0 6px rgba(212,135,42,0.55);
 }
 
 /* ── Iframe area ──────────────────────────────────────────────────── */
 #srm-iframe-wrap {
   flex: 1;
   position: relative;
-  overflow: hidden;
+  overflow: hidden;   /* clip the scaled iframe — prevents horizontal scroll */
   background: #fff;
   min-height: 0;
-  /* Suppress native browser context menu appearing over our action bar */
-  -webkit-user-select: none;
-  user-select: none;
-}
-/* Re-enable text selection inside the iframe itself */
-.srm-iframe {
-  -webkit-user-select: auto;
-  user-select: auto;
 }
 
 #srm-iframes-container {
   width: 100%;
   height: 100%;
+  overflow: hidden;
 }
+
+/* Iframe is zoomed to 80% to show more content.
+   We compensate with 125% size so the visible area fills the container.
+   overflow:hidden on the parent clips anything beyond bounds. */
 .srm-iframe {
   display: none;
-  width: 125%;          /* compensate for zoom so content fills the frame */
+  width: 125%;
   height: 125%;
   border: none;
   background: #fff;
-  zoom: 0.8;            /* scale iframe content to 80% */
+  transform: scale(0.8);
   transform-origin: top left;
+  /* No zoom property — transform is more reliable and doesn't cause reflow overflow */
+}
+
+/* ── Click shield ─────────────────────────────────────────────────── */
+/* Transparent overlay that captures pointer events above the iframe.
+   Lets us intercept clicks for link routing, and toggled off briefly
+   during drag operations to allow text selection. */
+#srm-click-shield {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  cursor: default;
+  /* No background — fully transparent */
 }
 
 /* ── Selection action bar ─────────────────────────────────────────── */
 #srm-action-bar {
   position: absolute;
-  bottom: 16px;
+  bottom: 14px;
   left: 50%;
   transform: translateX(-50%) translateY(8px);
   display: flex;
   align-items: center;
   background: var(--srm-surface);
   border: 1px solid var(--srm-border);
-  border-radius: 44px;
-  padding: 4px 5px 4px 12px;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.72), 0 0 0 1px rgba(212,135,42,0.1);
+  border-radius: 40px;
+  padding: 3px 4px 3px 11px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 0 1px rgba(212,135,42,0.1);
   z-index: 20;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.18s ease, transform 0.2s cubic-bezier(0.34,1.56,0.64,1);
-  max-width: calc(100% - 32px);
+  transition: opacity 0.17s ease, transform 0.19s cubic-bezier(0.34,1.56,0.64,1);
+  max-width: calc(100% - 28px);
   white-space: nowrap;
 }
 #srm-action-bar.visible {
@@ -383,7 +384,7 @@
   gap: 5px;
   flex-shrink: 1;
   min-width: 0;
-  margin-right: 10px;
+  margin-right: 9px;
 }
 .srm-sel-icon {
   color: var(--srm-amber);
@@ -392,20 +393,20 @@
 }
 #srm-action-preview {
   font-family: 'Outfit', sans-serif;
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--srm-cream2);
   font-style: italic;
-  max-width: 180px;
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 #srm-action-divider {
   width: 1px;
-  height: 20px;
+  height: 18px;
   background: var(--srm-border2);
   flex-shrink: 0;
-  margin-right: 5px;
+  margin-right: 4px;
 }
 #srm-action-buttons {
   display: flex;
@@ -416,15 +417,15 @@
 .srm-action-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   background: none;
   border: none;
   color: var(--srm-cream2);
   font-family: 'Outfit', sans-serif;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
-  padding: 6px 10px;
-  border-radius: 32px;
+  padding: 5px 9px;
+  border-radius: 28px;
   cursor: pointer;
   transition: background 0.13s, color 0.13s;
   white-space: nowrap;
@@ -457,7 +458,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 18px;
+  padding: 0 16px;
   background: var(--srm-surface);
   border-top: 1px solid var(--srm-border2);
   flex-shrink: 0;
@@ -466,7 +467,7 @@
 }
 #srm-footer-hint {
   font-family: 'Outfit', sans-serif;
-  font-size: 10px;
+  font-size: 9.5px;
   color: var(--srm-muted);
   font-style: italic;
   letter-spacing: 0.025em;
@@ -477,7 +478,7 @@
 }
 #srm-footer-status {
   font-family: 'Outfit', sans-serif;
-  font-size: 10.5px;
+  font-size: 10px;
   color: var(--srm-green);
   letter-spacing: 0.04em;
   white-space: nowrap;
