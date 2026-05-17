@@ -7,61 +7,71 @@
   'use strict';
 
   // ── State ──────────────────────────────────────────────
-  let _anchorRange       = null;   // selection range in editor (set by editor.js)
-  let _currentQuery      = '';
-  let _iframeSelText     = '';     // text selected inside iframe (via postMessage)
-  let _actionBarVisible  = false;
+  let _anchorRange      = null;
+  let _iframeSelText    = '';
+  let _actionBarVisible = false;
+
+  // ── Tab management ─────────────────────────────────────
+  let _tabs        = [];
+  let _activeTabId = null;
+  let _tabCounter  = 0;
 
   // ── Build Modal DOM ────────────────────────────────────
   const overlay = document.createElement('div');
-  overlay.id    = 'srm-overlay';
+  overlay.id = 'srm-overlay';
   overlay.innerHTML = `
     <div id="srm-box">
-
-      <!-- Header -->
+      <!-- Header: address bar + controls -->
       <div id="srm-header">
         <div id="srm-header-left">
           <span id="srm-icon">⬡</span>
-          <span id="srm-query-label"></span>
+          <div id="srm-addressbar-wrap">
+            <input id="srm-addressbar" type="text" spellcheck="false" placeholder="Search or enter URL…" />
+            <button id="srm-addressbar-go" title="Go">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </button>
+          </div>
         </div>
         <div id="srm-header-right">
-          <button id="srm-btn-newtab" title="Open in new tab">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-            New Tab
+          <button id="srm-btn-newtab-ext" title="Open in browser">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           </button>
           <button id="srm-btn-close" title="Close (Esc)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
       </div>
 
       <!-- Tab bar -->
-      <div id="srm-tabs">
-        <div id="srm-tab-active">
-          <span id="srm-tab-favicon"></span>
-          <span id="srm-tab-title">Bing Search</span>
-        </div>
-        <div id="srm-tab-trail"></div>
+      <div id="srm-tabbar">
+        <div id="srm-tabs-list"></div>
+        <button id="srm-new-tab-btn" title="New tab (Ctrl+T)">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
       </div>
 
       <!-- Iframe area -->
       <div id="srm-iframe-wrap">
         <div id="srm-loading-bar"><div id="srm-loading-fill"></div></div>
-        <iframe id="srm-iframe" src="" frameborder="0" allowfullscreen sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"></iframe>
+        <div id="srm-iframes-container"></div>
 
-        <!-- In-modal floating action bar (appears on text selection inside iframe) -->
+        <!-- Floating selection action bar -->
         <div id="srm-action-bar" aria-hidden="true">
-          <span id="srm-action-preview"></span>
+          <div id="srm-action-preview-wrap">
+            <svg class="srm-sel-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 9l-6 6v6h6l6-6"/><path d="M22 2L12 12"/></svg>
+            <span id="srm-action-preview"></span>
+          </div>
+          <div id="srm-action-divider"></div>
           <div id="srm-action-buttons">
-            <button class="srm-action-btn" data-action="insert" title="Add after your selection in editor">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
-              Add to note
+            <button class="srm-action-btn" data-action="insert" title="Add alongside your selection in editor">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="12" y1="9" x2="12" y2="15"/></svg>
+              Add text
             </button>
-            <button class="srm-action-btn" data-action="search-tab" title="Search this text in new Bing tab">
+            <button class="srm-action-btn" data-action="search-tab" title="Search in new tab">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              Search
+              Search tab
             </button>
-            <button class="srm-action-btn" data-action="copy" title="Copy text">
+            <button class="srm-action-btn" data-action="copy" title="Copy">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
               Copy
             </button>
@@ -71,252 +81,336 @@
 
       <!-- Footer -->
       <div id="srm-footer">
-        <span id="srm-footer-hint">Select text inside the search results to get options</span>
+        <span id="srm-footer-hint">Select text in results for quick actions</span>
         <span id="srm-footer-status"></span>
       </div>
-
     </div>
   `;
   document.body.appendChild(overlay);
 
-  const iframe      = document.getElementById('srm-iframe');
-  const queryLabel  = document.getElementById('srm-query-label');
-  const tabTitle    = document.getElementById('srm-tab-title');
-  const actionBar   = document.getElementById('srm-action-bar');
-  const actionPrev  = document.getElementById('srm-action-preview');
-  const loadingFill = document.getElementById('srm-loading-fill');
-  const footerHint  = document.getElementById('srm-footer-hint');
-  const footerStat  = document.getElementById('srm-footer-status');
+  const addrBar          = document.getElementById('srm-addressbar');
+  const addrGo           = document.getElementById('srm-addressbar-go');
+  const tabsList         = document.getElementById('srm-tabs-list');
+  const iframesContainer = document.getElementById('srm-iframes-container');
+  const actionBar        = document.getElementById('srm-action-bar');
+  const actionPrev       = document.getElementById('srm-action-preview');
+  const loadingFill      = document.getElementById('srm-loading-fill');
+  const footerHint       = document.getElementById('srm-footer-hint');
+  const footerStat       = document.getElementById('srm-footer-status');
 
   // ── Loading bar ────────────────────────────────────────
   let _loadTimer = null;
   function startLoadBar() {
+    clearTimeout(_loadTimer);
     loadingFill.style.transition = 'none';
     loadingFill.style.width = '0%';
     loadingFill.parentElement.classList.add('active');
     requestAnimationFrame(() => {
       loadingFill.style.transition = 'width 2.8s cubic-bezier(0.1,0.6,0.4,1)';
-      loadingFill.style.width = '75%';
+      loadingFill.style.width = '78%';
     });
   }
   function finishLoadBar() {
     loadingFill.style.transition = 'width 0.3s ease';
     loadingFill.style.width = '100%';
+    clearTimeout(_loadTimer);
     _loadTimer = setTimeout(() => {
       loadingFill.parentElement.classList.remove('active');
     }, 350);
   }
-  iframe.addEventListener('load', finishLoadBar);
+
+  // ── Tab helpers ────────────────────────────────────────
+  function escTabTitle(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function buildSearchUrl(text) {
+    return 'https://www.bing.com/search?q=' + encodeURIComponent(text);
+  }
+  function extractTitleFromUrl(url) {
+    try {
+      const u = new URL(url);
+      const q = u.searchParams.get('q') || u.searchParams.get('query') || u.searchParams.get('search');
+      if (q) return q;
+      return u.hostname.replace(/^www\./,'');
+    } catch(e) { return url.slice(0,30); }
+  }
+
+  // ── Tab creation ───────────────────────────────────────
+  function createTab(url, title) {
+    const id = ++_tabCounter;
+
+    const iframe = document.createElement('iframe');
+    iframe.className = 'srm-iframe';
+    iframe.setAttribute('frameborder', '0');
+    iframe.setAttribute('allowfullscreen', '');
+    // No allow-popups-to-escape-sandbox → links stay inside iframe/modal
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups');
+    iframe.dataset.tabId = id;
+    iframesContainer.appendChild(iframe);
+
+    const tabEl = document.createElement('div');
+    tabEl.className = 'srm-tab';
+    tabEl.dataset.tabId = id;
+    tabEl.innerHTML = `
+      <span class="srm-tab-favicon"></span>
+      <span class="srm-tab-label">${escTabTitle(title || 'New Tab')}</span>
+      <button class="srm-tab-close" title="Close tab">
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    `;
+    tabsList.appendChild(tabEl);
+
+    const tab = { id, title: title || 'New Tab', url: url || '', iframe, tabEl };
+    _tabs.push(tab);
+
+    iframe.addEventListener('load', () => {
+      finishLoadBar();
+      try {
+        const t = iframe.contentDocument && iframe.contentDocument.title;
+        if (t && t.trim()) {
+          tab.title = t;
+          const short = t.length > 20 ? t.slice(0,19)+'…' : t;
+          tabEl.querySelector('.srm-tab-label').textContent = short;
+        }
+      } catch(e) {}
+      if (_activeTabId === id) addrBar.value = tab.iframe.src || tab.url;
+    });
+
+    if (url) iframe.src = url;
+    return tab;
+  }
+
+  function activateTab(id) {
+    _activeTabId = id;
+    _tabs.forEach(t => {
+      const on = t.id === id;
+      t.iframe.style.display = on ? 'block' : 'none';
+      t.tabEl.classList.toggle('srm-tab-active', on);
+    });
+    const tab = _tabs.find(t => t.id === id);
+    if (tab) addrBar.value = tab.iframe.src || tab.url || '';
+    hideActionBar();
+  }
+
+  function closeTab(id) {
+    const idx = _tabs.findIndex(t => t.id === id);
+    if (idx === -1) return;
+    const tab = _tabs[idx];
+    tab.iframe.remove();
+    tab.tabEl.remove();
+    _tabs.splice(idx, 1);
+    if (_tabs.length === 0) { close(); return; }
+    if (_activeTabId === id) {
+      activateTab(_tabs[Math.min(idx, _tabs.length-1)].id);
+    }
+  }
+
+  function navigateActiveTab(url, newTitle) {
+    const tab = _tabs.find(t => t.id === _activeTabId);
+    if (!tab) return;
+    tab.url = url;
+    addrBar.value = url;
+    const t = newTitle || extractTitleFromUrl(url);
+    tab.title = t;
+    const short = t.length > 20 ? t.slice(0,19)+'…' : t;
+    tab.tabEl.querySelector('.srm-tab-label').textContent = short;
+    startLoadBar();
+    tab.iframe.src = url;
+    hideActionBar();
+  }
+
+  function openInNewTab(url, title) {
+    const tab = createTab(url, title || extractTitleFromUrl(url));
+    startLoadBar();
+    activateTab(tab.id);
+    tab.tabEl.scrollIntoView({ behavior:'smooth', inline:'nearest' });
+  }
+
+  // ── Tab bar events ─────────────────────────────────────
+  tabsList.addEventListener('click', e => {
+    const closeBtn = e.target.closest('.srm-tab-close');
+    if (closeBtn) {
+      const tabEl = closeBtn.closest('.srm-tab');
+      if (tabEl) { closeTab(+tabEl.dataset.tabId); return; }
+    }
+    const tabEl = e.target.closest('.srm-tab');
+    if (tabEl) activateTab(+tabEl.dataset.tabId);
+  });
+
+  document.getElementById('srm-new-tab-btn').addEventListener('click', () => {
+    openInNewTab('', 'New Tab');
+    addrBar.value = '';
+    addrBar.focus();
+  });
+
+  // ── Address bar ────────────────────────────────────────
+  function goToAddressBar() {
+    let val = addrBar.value.trim();
+    if (!val) return;
+    const isUrl = /^https?:\/\//i.test(val) || /^[a-z0-9-]+\.[a-z]{2,}/i.test(val);
+    const url = isUrl ? (val.startsWith('http') ? val : 'https://' + val) : buildSearchUrl(val);
+    navigateActiveTab(url);
+    addrBar.blur();
+  }
+  addrGo.addEventListener('click', goToAddressBar);
+  addrBar.addEventListener('keydown', e => { if (e.key === 'Enter') goToAddressBar(); });
+  addrBar.addEventListener('focus', () => addrBar.select());
 
   // ── Open / Close ───────────────────────────────────────
   function open(queryText) {
-    _currentQuery = queryText;
-    queryLabel.textContent = queryText;
-    tabTitle.textContent   = queryText + ' — Bing';
     hideActionBar();
-    startLoadBar();
-    iframe.src = 'https://www.bing.com/search?q=' + encodeURIComponent(queryText);
     overlay.classList.add('open');
     overlay.setAttribute('aria-hidden', 'false');
+    if (_tabs.length === 0) {
+      const tab = createTab(buildSearchUrl(queryText), queryText);
+      startLoadBar();
+      activateTab(tab.id);
+    } else {
+      navigateActiveTab(buildSearchUrl(queryText), queryText);
+    }
   }
 
   function close() {
     overlay.classList.remove('open');
     overlay.setAttribute('aria-hidden', 'true');
     hideActionBar();
-    // Blank iframe after transition to stop background loading
-    setTimeout(() => { iframe.src = ''; }, 220);
   }
 
-  // ── Action bar ─────────────────────────────────────────
-  function showActionBar(text) {
-    _iframeSelText   = text;
-    _actionBarVisible = true;
-    // Truncate preview
-    const preview = text.length > 60 ? text.slice(0, 58) + '…' : text;
-    actionPrev.textContent = '"' + preview + '"';
-    actionBar.classList.add('visible');
-    actionBar.setAttribute('aria-hidden', 'false');
-    footerHint.style.display = 'none';
-    footerStat.textContent   = '';
-  }
-
-  function hideActionBar() {
-    _actionBarVisible  = false;
-    _iframeSelText     = '';
-    actionBar.classList.remove('visible');
-    actionBar.setAttribute('aria-hidden', 'true');
-    footerHint.style.display = '';
-    footerStat.textContent   = '';
-  }
-
-  // ── Detect selection changes inside iframe via postMessage ──
-  // We inject a tiny script into the iframe through the sandbox's
-  // allow-scripts. Because Bing is cross-origin, direct DOM access is
-  // blocked — so we rely on the user's own selections on THIS document
-  // side (the overlay area) as a fallback, plus a polling trick.
-  //
-  // Primary approach: listen for mouseup on the overlay's iframe area.
-  // When the user selects text inside the iframe and then the mouse
-  // comes back up on the overlay (even on the thin chrome around the
-  // iframe), we can't read iframe selection directly. Instead we
-  // provide a visible hint: "Select text → right-click → Copy, then
-  // use the action bar below". But we CAN detect if something is on
-  // the clipboard via the Clipboard API after a copy event fires from
-  // the iframe contentWindow — but that also requires same-origin.
-  //
-  // Best achievable approach for cross-origin iframes:
-  // Listen to 'copy' events that bubble to window (they do bubble from
-  // cross-origin iframes in some browsers), or watch for focus events
-  // from the iframe + a short polling window after mouseup.
-
+  // ── Selection detection ────────────────────────────────
   let _pollInterval = null;
-
-  function startIframeSelectionPolling() {
+  function startSelectionPolling() {
     clearInterval(_pollInterval);
     _pollInterval = setInterval(() => {
-      // Try to read selection from the page document (works if user
-      // clicks outside iframe, e.g. on action bar itself)
+      if (!overlay.classList.contains('open')) { clearInterval(_pollInterval); return; }
       const sel = window.getSelection();
       if (sel && !sel.isCollapsed) {
         const t = sel.toString().trim();
-        if (t.length > 1) { showActionBar(t); return; }
+        if (t.length > 1) { showActionBar(t); }
       }
     }, 400);
   }
 
-  function stopIframeSelectionPolling() {
-    clearInterval(_pollInterval);
-  }
-
-  overlay.classList.add('open');
-  overlay.classList.remove('open'); // init closed
-
-  // On iframe mouseup (mouse released over iframe area) — start polling
   document.getElementById('srm-iframe-wrap').addEventListener('mouseup', () => {
     if (!overlay.classList.contains('open')) return;
-    // Give browser time to update selection
     setTimeout(() => {
       const sel = window.getSelection();
       const t   = sel && !sel.isCollapsed ? sel.toString().trim() : '';
-      if (t.length > 1) {
-        showActionBar(t);
-      }
+      if (t.length > 1) showActionBar(t);
     }, 80);
-    startIframeSelectionPolling();
+    startSelectionPolling();
   });
 
-  // Also listen for mousedown on the wrap to hide bar if clicking away
-  document.getElementById('srm-iframe-wrap').addEventListener('mousedown', (e) => {
-    if (e.target !== actionBar && !actionBar.contains(e.target)) {
-      // Don't immediately hide — user might be starting a new selection
-    }
-  });
-
-  // Hide bar when clicking elsewhere inside overlay chrome
   document.getElementById('srm-header').addEventListener('mousedown', hideActionBar);
-  document.getElementById('srm-tabs').addEventListener('mousedown', hideActionBar);
+  document.getElementById('srm-tabbar').addEventListener('mousedown', hideActionBar);
   document.getElementById('srm-footer').addEventListener('mousedown', hideActionBar);
 
-  // ── Action bar button handlers ─────────────────────────
+  // ── Action bar ─────────────────────────────────────────
+  function showActionBar(text) {
+    _iframeSelText    = text;
+    _actionBarVisible = true;
+    actionPrev.textContent = text.length > 52 ? text.slice(0,51)+'…' : text;
+    actionBar.classList.add('visible');
+    actionBar.setAttribute('aria-hidden', 'false');
+    footerHint.style.opacity = '0';
+  }
+
+  function hideActionBar() {
+    _actionBarVisible = false;
+    _iframeSelText    = '';
+    actionBar.classList.remove('visible');
+    actionBar.setAttribute('aria-hidden', 'true');
+    footerHint.style.opacity = '';
+    footerStat.textContent   = '';
+    clearInterval(_pollInterval);
+  }
+
   actionBar.addEventListener('click', e => {
     const btn = e.target.closest('.srm-action-btn');
     if (!btn) return;
-    const action = btn.dataset.action;
-    const text   = _iframeSelText;
+    const action = btn.dataset.action, text = _iframeSelText;
     if (!text) return;
-
     if (action === 'insert') {
       insertAfterAnchor(text);
       hideActionBar();
       setStatus('✓ Added to note');
     } else if (action === 'search-tab') {
-      // Navigate current iframe to new query, and push to history
-      navigateIframe(text);
+      openInNewTab(buildSearchUrl(text), text);
       hideActionBar();
     } else if (action === 'copy') {
-      navigator.clipboard.writeText(text).then(() => {
-        setStatus('✓ Copied');
-        hideActionBar();
-      });
+      navigator.clipboard.writeText(text).then(() => { setStatus('✓ Copied'); hideActionBar(); });
     }
   });
 
-  function navigateIframe(queryText) {
-    _currentQuery        = queryText;
-    queryLabel.textContent = queryText;
-    tabTitle.textContent   = queryText + ' — Bing';
-    startLoadBar();
-    iframe.src = 'https://www.bing.com/search?q=' + encodeURIComponent(queryText);
-    // Push to breadcrumb trail
-    const trail = document.getElementById('srm-tab-trail');
-    const crumb = document.createElement('span');
-    crumb.className   = 'srm-crumb';
-    crumb.textContent = queryText;
-    crumb.title       = 'Search: ' + queryText;
-    trail.appendChild(crumb);
-  }
-
   function setStatus(msg) {
-    footerStat.textContent = msg;
-    setTimeout(() => { footerStat.textContent = ''; }, 2500);
+    footerStat.textContent   = msg;
+    footerHint.style.opacity = '0';
+    setTimeout(() => { footerStat.textContent = ''; footerHint.style.opacity = ''; }, 2500);
   }
 
   // ── insertAfterAnchor ──────────────────────────────────
+  // Inserts selected text alongside the original selection as a visually distinct span
   function insertAfterAnchor(text) {
-    // _anchorRange is set by editor.js via LexicaSearch.setAnchor()
     if (!_anchorRange) {
-      showToast('⚠ Lost selection anchor — re-select text in editor first');
+      if (typeof showToast === 'function') showToast('⚠ Re-select text in editor first');
       return;
     }
     try {
       if (!document.contains(_anchorRange.startContainer)) {
-        showToast('⚠ Selection is no longer valid');
+        if (typeof showToast === 'function') showToast('⚠ Selection is no longer valid');
         return;
       }
       const insertRange = _anchorRange.cloneRange();
       insertRange.collapse(false);
 
       const span = document.createElement('span');
-      span.className              = 'inserted-text-span';
+      span.className = 'inserted-text-span';
       span.setAttribute('data-inserted', 'true');
-      span.textContent = ' [' + text + ']';
+      span.textContent = text;
 
       insertRange.insertNode(span);
+
       const afterRange = document.createRange();
       afterRange.setStartAfter(span);
       afterRange.collapse(true);
       const sel = window.getSelection();
       sel.removeAllRanges();
       sel.addRange(afterRange);
-      triggerAutosave();
+      if (typeof triggerAutosave === 'function') triggerAutosave();
     } catch (err) {
-      showToast('⚠ Could not insert text');
+      if (typeof showToast === 'function') showToast('⚠ Could not insert text');
     }
   }
 
-  // ── Header button handlers ─────────────────────────────
+  // ── Header buttons ─────────────────────────────────────
   document.getElementById('srm-btn-close').addEventListener('click', close);
-  document.getElementById('srm-btn-newtab').addEventListener('click', () => {
-    if (_currentQuery) {
-      window.open('https://www.bing.com/search?q=' + encodeURIComponent(_currentQuery), '_blank', 'noopener');
-    }
+  document.getElementById('srm-btn-newtab-ext').addEventListener('click', () => {
+    const tab = _tabs.find(t => t.id === _activeTabId);
+    const url = (tab && (tab.iframe.src || tab.url)) || addrBar.value;
+    if (url) window.open(url, '_blank', 'noopener');
   });
 
-  // Click on backdrop closes
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) close();
-  });
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 
-  // Keyboard close
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && overlay.classList.contains('open')) close();
+    if (!overlay.classList.contains('open')) return;
+    if (e.key === 'Escape') { close(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key === 't') {
+      e.preventDefault();
+      openInNewTab('', 'New Tab');
+      addrBar.value = '';
+      addrBar.focus();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+      e.preventDefault();
+      if (_activeTabId !== null) closeTab(_activeTabId);
+    }
   });
 
   // ── Public API ─────────────────────────────────────────
   window.LexicaSearch = {
     open,
     close,
+    openInNewTab,
     setAnchor(range) { _anchorRange = range; }
   };
 
