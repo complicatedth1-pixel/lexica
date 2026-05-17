@@ -101,10 +101,16 @@ document.getElementById('chapterList').addEventListener('click', e => {
   }
 }, true);
 
-// Save time when going home
+// Save time when going home (whether paused or still running)
 document.getElementById('homeLink').addEventListener('click', () => {
   if (!pdfMode) {
-    if (swRunning && swStart) swSessionElapsed += Date.now() - swStart;
+    // If the stopwatch is still running, accumulate the current interval before saving
+    if (swRunning && swStart) {
+      const elapsed = Date.now() - swStart;
+      swElapsed += elapsed;
+      swSessionElapsed += elapsed;
+      swStart = null; // prevent double-counting
+    }
     saveStopwatchToTopic();
     clearInterval(swTimer); swRunning = false; swElapsed = 0; swStart = null; swSessionElapsed = 0;
     swStartStop.textContent = '▶'; swDisplay.textContent = '00:00'; swDisplay.classList.remove('running');

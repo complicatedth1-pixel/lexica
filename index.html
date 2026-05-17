@@ -57,7 +57,6 @@
         <a href="#collections" id="nav-collections">Library</a>
         <a href="#" id="nav-analytics" onclick="openAnalytics();return false;">Analytics</a>
         <a href="#" id="nav-highlights" onclick="openHighlightsPage();return false;">Highlights</a>
-        <a href="#" id="nav-facts" onclick="openFactsPage();return false;">Facts</a>
       </ul>
       <button class="theme-toggle" id="themeToggle" title="Toggle theme"></button>
     </div>
@@ -239,6 +238,8 @@
     <button class="eo-hl hl-p" id="hl-p">✦ P</button>
     <button class="eo-hl hl-m" id="hl-m">✦ M</button>
     <button class="eo-hl hl-f" id="hl-f">✦ F</button>
+    <button class="eo-hl hl-per" id="hl-per" title="Personalities">✦ Per</button>
+    <button class="eo-hl hl-ins" id="hl-ins" title="Institutions &amp; Companies">✦ Ins</button>
     <div class="topbar-sep"></div>
     <button class="eo-btn" id="btn-link">Link</button>
     <button class="eo-icon-btn" id="btn-undo">↩</button>
@@ -401,7 +402,7 @@
   </div>
 </div>
 
-<!-- HIGHLIGHTS PAGE -->
+<!-- HIGHLIGHTS PAGE (unified — Facts is a subtab here) -->
 <div id="highlightsPage" style="position:fixed;inset:0;z-index:150;overflow-y:auto;background:var(--ink);display:none;scrollbar-width:thin;-webkit-overflow-scrolling:touch;">
   <div style="padding:1rem 1.4rem;background:var(--ink);border-bottom:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:20;backdrop-filter:blur(16px);gap:1rem;flex-wrap:wrap;">
     <div class="logo-text">LEXICA<sup>✦</sup></div>
@@ -410,18 +411,24 @@
   <div style="padding:2.5rem 1.4rem 1.5rem;border-bottom:1px solid var(--border-color);">
     <div style="font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--amber);margin-bottom:0.8rem;font-weight:500;">✦ Your annotations</div>
     <h1 style="font-family:'Cormorant Garamond',serif;font-size:clamp(36px,8vw,56px);font-weight:300;color:var(--cream);line-height:1.1;">Your <em style="font-style:italic;color:var(--amber);">Highlights</em></h1>
-    <p style="font-size:13px;color:var(--cream2);margin-top:0.8rem;font-weight:300;">All P and M highlights across every book and PDF.</p>
+    <p style="font-size:13px;color:var(--cream2);margin-top:0.8rem;font-weight:300;">All highlights — P, M, F, Per, Ins — across every book and PDF.</p>
   </div>
   <div style="padding:1.5rem 1.4rem;">
+    <!-- Controls row -->
     <div style="margin-bottom:1.5rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
       <label style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--cream2);">Book</label>
       <select id="hlPageBookSelect" onchange="renderHighlightsPage()" style="background:var(--glass2);border:1px solid var(--border-color);color:var(--cream);font-family:'Outfit',sans-serif;font-size:13px;padding:0.5rem 0.8rem;border-radius:3px;outline:none;cursor:pointer;min-height:40px;max-width:200px;"></select>
-      <div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap;">
-        <button onclick="filterHighlights('all')" id="hlFilterAll" style="background:var(--amber);border:none;color:var(--ink);font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;min-height:36px;">All</button>
-        <button onclick="filterHighlights('p')" id="hlFilterP" style="background:transparent;border:1px solid var(--border-color);color:var(--cream2);font-family:'Outfit',sans-serif;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;min-height:36px;">P</button>
-        <button onclick="filterHighlights('m')" id="hlFilterM" style="background:transparent;border:1px solid var(--border-color);color:var(--cream2);font-family:'Outfit',sans-serif;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;min-height:36px;">M</button>
+      <!-- Subtab buttons -->
+      <div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;" id="hlSubtabBar">
+        <button onclick="switchHlTab('all')" id="hlTabAll" style="background:var(--amber);border:none;color:var(--ink);font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;min-height:36px;">All</button>
+        <button onclick="switchHlTab('p')" id="hlTabP" style="background:transparent;border:1px solid rgba(255,229,102,0.4);color:#ffe566;font-family:'Outfit',sans-serif;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;min-height:36px;">P</button>
+        <button onclick="switchHlTab('m')" id="hlTabM" style="background:transparent;border:1px solid rgba(106,223,106,0.4);color:#6adf6a;font-family:'Outfit',sans-serif;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;min-height:36px;">M</button>
+        <button onclick="switchHlTab('f')" id="hlTabF" style="background:transparent;border:1px solid rgba(167,139,250,0.4);color:#a78bfa;font-family:'Outfit',sans-serif;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;min-height:36px;">F</button>
+        <button onclick="switchHlTab('per')" id="hlTabPer" style="background:transparent;border:1px solid rgba(251,146,60,0.4);color:#fb923c;font-family:'Outfit',sans-serif;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;min-height:36px;">Per</button>
+        <button onclick="switchHlTab('ins')" id="hlTabIns" style="background:transparent;border:1px solid rgba(34,211,238,0.4);color:#22d3ee;font-family:'Outfit',sans-serif;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;min-height:36px;">Ins</button>
       </div>
     </div>
+    <!-- Sections (shown/hidden by tab) -->
     <div id="hlPagePSection">
       <div style="font-family:'Cormorant Garamond',serif;font-size:clamp(20px,4vw,26px);font-weight:400;color:var(--cream);margin-bottom:1rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border-color);">P Highlights <span id="hlPagePCount" style="font-size:16px;color:var(--amber);"></span></div>
       <div id="hlPagePList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-bottom:2.5rem;"></div>
@@ -430,28 +437,17 @@
       <div style="font-family:'Cormorant Garamond',serif;font-size:clamp(20px,4vw,26px);font-weight:400;color:var(--cream);margin-bottom:1rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border-color);">M Highlights <span id="hlPageMCount" style="font-size:16px;color:#6adf6a;"></span></div>
       <div id="hlPageMList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-bottom:2.5rem;"></div>
     </div>
-  </div>
-</div>
-
-<!-- FACTS PAGE -->
-<div id="factsPage" style="position:fixed;inset:0;z-index:150;overflow-y:auto;background:var(--ink);display:none;scrollbar-width:thin;-webkit-overflow-scrolling:touch;">
-  <div style="padding:1rem 1.4rem;background:var(--ink);border-bottom:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:20;backdrop-filter:blur(16px);gap:1rem;flex-wrap:wrap;">
-    <div class="logo-text">LEXICA<sup>✦</sup></div>
-    <button onclick="closeFactsPage()" style="background:transparent;border:1px solid var(--border-color);color:var(--cream2);font-family:'Outfit',sans-serif;font-size:12px;letter-spacing:1px;text-transform:uppercase;padding:0.5rem 1rem;border-radius:2px;cursor:pointer;min-height:40px;">← Back</button>
-  </div>
-  <div style="padding:2.5rem 1.4rem 1.5rem;border-bottom:1px solid var(--border-color);">
-    <div style="font-size:10px;letter-spacing:4px;text-transform:uppercase;color:#a78bfa;margin-bottom:0.8rem;font-weight:500;">✦ Your facts</div>
-    <h1 style="font-family:'Cormorant Garamond',serif;font-size:clamp(36px,8vw,56px);font-weight:300;color:var(--cream);line-height:1.1;">Your <em style="font-style:italic;color:#a78bfa;">Facts</em></h1>
-    <p style="font-size:13px;color:var(--cream2);margin-top:0.8rem;font-weight:300;">All F highlights across every book and PDF.</p>
-  </div>
-  <div style="padding:1.5rem 1.4rem;">
-    <div style="margin-bottom:1.5rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
-      <label style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--cream2);">Book</label>
-      <select id="factsPageBookSelect" onchange="renderFactsPage()" style="background:var(--glass2);border:1px solid var(--border-color);color:var(--cream);font-family:'Outfit',sans-serif;font-size:13px;padding:0.5rem 0.8rem;border-radius:3px;outline:none;cursor:pointer;min-height:40px;max-width:200px;"></select>
+    <div id="hlPageFSection">
+      <div style="font-family:'Cormorant Garamond',serif;font-size:clamp(20px,4vw,26px);font-weight:400;color:var(--cream);margin-bottom:1rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border-color);">F — Facts <span id="hlPageFCount" style="font-size:16px;color:#a78bfa;"></span></div>
+      <div id="hlPageFList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-bottom:2.5rem;"></div>
     </div>
-    <div id="factsPageFSection">
-      <div style="font-family:'Cormorant Garamond',serif;font-size:clamp(20px,4vw,26px);font-weight:400;color:var(--cream);margin-bottom:1rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border-color);">F Facts <span id="factsPageFCount" style="font-size:16px;color:#a78bfa;"></span></div>
-      <div id="factsPageFList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-bottom:2.5rem;"></div>
+    <div id="hlPagePerSection">
+      <div style="font-family:'Cormorant Garamond',serif;font-size:clamp(20px,4vw,26px);font-weight:400;color:var(--cream);margin-bottom:1rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border-color);">Per — Personalities <span id="hlPagePerCount" style="font-size:16px;color:#fb923c;"></span></div>
+      <div id="hlPagePerList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-bottom:2.5rem;"></div>
+    </div>
+    <div id="hlPageInsSection">
+      <div style="font-family:'Cormorant Garamond',serif;font-size:clamp(20px,4vw,26px);font-weight:400;color:var(--cream);margin-bottom:1rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border-color);">Ins — Institutions &amp; Companies <span id="hlPageInsCount" style="font-size:16px;color:#22d3ee;"></span></div>
+      <div id="hlPageInsList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-bottom:2.5rem;"></div>
     </div>
   </div>
 </div>

@@ -291,7 +291,22 @@
 .note-card p { font-size: 11px; font-family: sans-serif; color: #887fa0; line-height: 1.5; }
 .note-card .note-tag { font-size: 9px; color: #554e68; margin-top: 4px; letter-spacing: 0.06em; }
 
-/* ── extra,highlighter ── */
+.eo-hl.hl-per { background: #fb923c; color: #3d1500; }
+.eo-hl.hl-per:hover { background: #ea7a20; }
+.eo-hl.hl-ins { background: #22d3ee; color: #003340; }
+.eo-hl.hl-ins:hover { background: #06b6d4; }
+.hl-span-per { background: rgba(251,146,60,0.55); border-radius: 2px; }
+.hl-span-ins { background: rgba(34,211,238,0.45); border-radius: 2px; }
+
+/* Images pasted into editor must never overflow */
+.section-editor img, #editor img { max-width: 100%; height: auto; display: block; margin: 0.5em 0; border-radius: 4px; }
+
+/* Tables pasted into editor */
+.section-editor table, #editor table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 0.8em 0; overflow-x: auto; display: block; }
+.section-editor td, .section-editor th, #editor td, #editor th { border: 1px solid rgba(100,80,40,0.3); padding: 4px 8px; word-break: break-word; text-align: left; }
+.section-editor th, #editor th { background: rgba(100,80,40,0.08); font-weight: 600; }
+
+/* ── extra, highlighter ── */
 .hl-active {
   outline: 2px solid var(--amber);
   outline-offset: 2px;

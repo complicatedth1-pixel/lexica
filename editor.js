@@ -260,6 +260,7 @@ function renderPage() {
     secEditor.addEventListener('input', () => { sec.content = secEditor.innerHTML; const hasC = secEditor.textContent.trim().length > 0; block.querySelector('.section-status').textContent = hasC ? 'Has content' : 'Empty'; block.querySelector('.section-status').className = 'section-status' + (hasC ? ' has-content' : ''); const aiBtn = block.querySelector('.ai-gen-btn'); if (aiBtn && hasC) aiBtn.remove(); triggerAutosave(); updateWordCount(); });
     secEditor.addEventListener('click', e => { const a = e.target.closest('a'); if (a && a.href) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); } });
     secEditor.addEventListener('input', () => setTimeout(updateHL, 80));
+    secEditor.addEventListener('paste', e => handleEditorPaste(e, secEditor, sec));
     const aiGenBtn = block.querySelector('.ai-gen-btn'); if (aiGenBtn) aiGenBtn.addEventListener('click', () => openAIGenForSection(sec));
     container.appendChild(block);
   });
@@ -504,39 +505,44 @@ document.getElementById('btn-redo').addEventListener('mousedown', e => { e.preve
 editor.addEventListener('click', e => { const a = e.target.closest('a'); if (a && a.href) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); } });
 
 // Highlight buttons
-let activeHlType = null; // 'p', 'm', 'f', or null
+let activeHlType = null; // 'p', 'm', 'f', 'per', 'ins', or null
 
 function setActiveHighlighter(type) {
-  const hlP = document.getElementById('hl-p');
-  const hlM = document.getElementById('hl-m');
-  const hlF = document.getElementById('hl-f');
+  const hlP   = document.getElementById('hl-p');
+  const hlM   = document.getElementById('hl-m');
+  const hlF   = document.getElementById('hl-f');
+  const hlPer = document.getElementById('hl-per');
+  const hlIns = document.getElementById('hl-ins');
   if (activeHlType === type) {
-    // Toggle off
     activeHlType = null;
-    hlP.classList.remove('hl-active');
-    hlM.classList.remove('hl-active');
-    hlF.classList.remove('hl-active');
+    [hlP, hlM, hlF, hlPer, hlIns].forEach(el => el && el.classList.remove('hl-active'));
     showToast('Highlighter off');
   } else {
     activeHlType = type;
-    hlP.classList.toggle('hl-active', type === 'p');
-    hlM.classList.toggle('hl-active', type === 'm');
-    hlF.classList.toggle('hl-active', type === 'f');
-    const label = type === 'p' ? '✦ Yellow highlighter on' : type === 'm' ? '✦ Green highlighter on' : '✦ Purple (Facts) highlighter on';
-    showToast(label);
+    hlP   && hlP.classList.toggle('hl-active', type === 'p');
+    hlM   && hlM.classList.toggle('hl-active', type === 'm');
+    hlF   && hlF.classList.toggle('hl-active', type === 'f');
+    hlPer && hlPer.classList.toggle('hl-active', type === 'per');
+    hlIns && hlIns.classList.toggle('hl-active', type === 'ins');
+    const labels = { p:'Yellow (P)', m:'Green (M)', f:'Purple (F — Facts)', per:'Orange (Per — Personalities)', ins:'Cyan (Ins — Institutions)' };
+    showToast('✦ ' + (labels[type] || type) + ' highlighter on');
   }
 }
 
 document.getElementById('hl-p').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('p'); });
 document.getElementById('hl-m').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('m'); });
 document.getElementById('hl-f').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('f'); });
+document.getElementById('hl-per').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('per'); });
+document.getElementById('hl-ins').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('ins'); });
 
 // Auto-highlight on mouseup / touchend when a highlighter is active
+const _hlColors = { p: '#ffe566', m: '#7ddb7d', f: '#a78bfa', per: '#fb923c', ins: '#22d3ee' };
+
 document.addEventListener('mouseup', e => {
   if (!activeHlType) return;
   const sel = window.getSelection();
   if (!sel || sel.isCollapsed) return;
-  const color = activeHlType === 'p' ? '#ffe566' : activeHlType === 'm' ? '#7ddb7d' : '#a78bfa';
+  const color = _hlColors[activeHlType] || '#ffe566';
   if (pdfMode && pdfCurrentPage !== null) applyHighlightToPDF(color, activeHlType);
   else applyPreciseHighlight(color, activeHlType);
 });
@@ -546,7 +552,7 @@ document.addEventListener('touchend', e => {
   setTimeout(() => {
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed) return;
-    const color = activeHlType === 'p' ? '#ffe566' : activeHlType === 'm' ? '#7ddb7d' : '#a78bfa';
+    const color = _hlColors[activeHlType] || '#ffe566';
     if (pdfMode && pdfCurrentPage !== null) applyHighlightToPDF(color, activeHlType);
     else applyPreciseHighlight(color, activeHlType);
   }, 100);
@@ -554,8 +560,93 @@ document.addEventListener('touchend', e => {
 
 document.getElementById('exportPDFBtn').addEventListener('click', () => window.print());
 
-// ── Autosave ──────────────────────────────────────────
-let autosaveTimer = null;
+// ── Paste handler (images + tables) ──────────────────
+function handleEditorPaste(e, editorEl, secObj) {
+  const cd = e.clipboardData || window.clipboardData;
+  if (!cd) return;
+
+  // ── Image paste ──────────────────────────────────────
+  const items = Array.from(cd.items || []);
+  const imgItem = items.find(it => it.type.startsWith('image/'));
+  if (imgItem) {
+    e.preventDefault();
+    const blob = imgItem.getAsFile();
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = document.createElement('img');
+      img.src = ev.target.result;
+      img.style.maxWidth = '100%';
+      img.style.height = 'auto';
+      img.style.display = 'block';
+      img.style.margin = '0.5em 0';
+      img.style.borderRadius = '4px';
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(img);
+        range.setStartAfter(img);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } else {
+        editorEl.appendChild(img);
+      }
+      if (secObj) { secObj.content = editorEl.innerHTML; }
+      triggerAutosave();
+      updateWordCount();
+      setTimeout(updateHL, 80);
+    };
+    reader.readAsDataURL(blob);
+    return;
+  }
+
+  // ── HTML paste (tables, rich content) ───────────────
+  const html = cd.getData('text/html');
+  if (html) {
+    e.preventDefault();
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    // Sanitise: fix images so they don't overflow
+    tmp.querySelectorAll('img').forEach(img => {
+      img.style.maxWidth = '100%';
+      img.style.height = 'auto';
+      img.removeAttribute('width');
+      img.removeAttribute('height');
+    });
+    // Sanitise tables: make them scrollable-friendly
+    tmp.querySelectorAll('table').forEach(tbl => {
+      tbl.style.borderCollapse = 'collapse';
+      tbl.style.width = '100%';
+      tbl.style.fontSize = '13px';
+      tbl.querySelectorAll('td, th').forEach(cell => {
+        cell.style.border = '1px solid rgba(100,80,40,0.3)';
+        cell.style.padding = '4px 8px';
+        cell.style.wordBreak = 'break-word';
+      });
+    });
+    // Strip unwanted outer wrappers but keep content
+    const frag = document.createDocumentFragment();
+    while (tmp.firstChild) frag.appendChild(tmp.firstChild);
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(frag);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else {
+      editorEl.appendChild(frag);
+    }
+    if (secObj) { secObj.content = editorEl.innerHTML; }
+    triggerAutosave();
+    updateWordCount();
+    setTimeout(updateHL, 80);
+    return;
+  }
+}
+
 function triggerAutosave() {
   clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(() => {
@@ -565,6 +656,7 @@ function triggerAutosave() {
   }, 1500);
 }
 document.getElementById('editor').addEventListener('input', () => { triggerAutosave(); updateWordCount(); });
+document.getElementById('editor').addEventListener('paste', e => handleEditorPaste(e, document.getElementById('editor'), null));
 
 async function doSaveDownload() { saveAll(); try { await saveLibrary(); showToast('✓ Synced to cloud'); } catch(e) { showToast('⚠ Sync failed'); } }
 document.addEventListener('keydown', e => { const mod = e.ctrlKey || e.metaKey; if (mod && e.key === 's') { e.preventDefault(); doSaveDownload(); } });
