@@ -197,10 +197,16 @@ footer { background: var(--glass); border-top: 1px solid var(--border-color); pa
 
 /* ── PRINT ── */
 @media print {
-  #homepage, #editor-shell .topbar, #editor-shell .sidebar, #editor-shell .right-panel, .editor-options-bar { display: none !important; }
+  @page { size: A4; margin: 0; }
+  #homepage, #editor-shell .topbar, #editor-shell .sidebar, #editor-shell .right-panel, .editor-options-bar, .a4-ruler-overlay, .a4-page-number { display: none !important; }
   #editor-shell { transform: none !important; width: 100% !important; height: auto !important; position: static !important; opacity: 1 !important; pointer-events: all !important; }
   .bg-canvas { overflow: visible !important; }
   .doc-area { overflow: visible !important; padding: 0 !important; }
   .page-card { box-shadow: none !important; border: none !important; padding: 0 !important; }
   body { overflow: visible !important; }
+  .a4-page-sheet { box-shadow: none !important; border: none !important; border-radius: 0 !important; padding: 20mm 20mm 20mm 25mm !important; min-height: 0 !important; }
+  .a4-page-wrap { max-width: 100% !important; margin: 0 !important; }
+  /* Each section starts on a new page IF it has been marked open; otherwise continuous */
+  /* For print, page breaks happen naturally at A4 boundaries */
+  .a4-section-wrap { break-inside: avoid-page; }
 }

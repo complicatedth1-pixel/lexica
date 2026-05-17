@@ -256,8 +256,7 @@ function renderPage() {
   }
   if (!tp.sections) tp.sections = [];
 
-  // ── A4 multi-page: wrap each section in its own page sheet ──
-  // The topic title banner is a fixed header outside the sheets
+  // ── A4 continuous flow: all sections in one scrollable sheet, page breaks are visual overlays ──
   container.innerHTML = '';
 
   // Topic header card (not an A4 sheet, just a label strip)
@@ -274,21 +273,74 @@ function renderPage() {
     updateWordCount(); return;
   }
 
+  // Single continuous A4-width sheet that holds all sections
+  const pageWrap = document.createElement('div');
+  pageWrap.className = 'a4-page-wrap';
+  const sheet = document.createElement('div');
+  sheet.className = 'a4-page-sheet a4-continuous-sheet';
+  pageWrap.appendChild(sheet);
+  container.appendChild(pageWrap);
+
+  // Overlay container for page-break ruler lines (positioned absolute over the sheet)
+  const rulerOverlay = document.createElement('div');
+  rulerOverlay.className = 'a4-ruler-overlay';
+  pageWrap.appendChild(rulerOverlay);
+
+  // A4 at 96dpi: content height per page = 1123px total - 56px top padding - 72px bottom padding = 995px
+  const A4_TOTAL = 1123;
+  const A4_PAD_TOP = 56;
+  const A4_PAD_BOTTOM = 72;
+  const A4_CONTENT = A4_TOTAL - A4_PAD_TOP - A4_PAD_BOTTOM; // 995px
+
+  function updatePageRulers() {
+    rulerOverlay.innerHTML = '';
+    const sheetH = sheet.offsetHeight;
+    const totalPages = Math.ceil((sheetH - A4_PAD_TOP) / A4_CONTENT);
+    for (let p = 1; p < totalPages; p++) {
+      const yInSheet = A4_PAD_TOP + p * A4_CONTENT;
+      const ruler = document.createElement('div');
+      ruler.className = 'a4-page-ruler';
+      ruler.style.top = yInSheet + 'px';
+      const label = document.createElement('span');
+      label.className = 'a4-page-ruler-label';
+      label.textContent = `Page ${p + 1}`;
+      ruler.appendChild(label);
+      rulerOverlay.appendChild(ruler);
+    }
+    // Update page count badge in topbar area
+    const pgInfo = document.getElementById('pageProgress');
+    if (pgInfo && ch && ch.topics) {
+      const pn = ch.topics.findIndex(t => t.id === tp.id) + 1;
+      pgInfo.textContent = `Page ${pn} of ${ch.topics.length}`;
+    }
+  }
+
+  // Page number badge (top-right, shows current page number dynamically)
+  const pgBadge = document.createElement('div');
+  pgBadge.className = 'a4-page-number';
+  pgBadge.textContent = '1';
+  sheet.appendChild(pgBadge);
+
+  // Track current visible page via scroll
+  function updateCurrentPageBadge() {
+    const docArea = document.querySelector('.doc-area');
+    if (!docArea) return;
+    const sheetTopInDocArea = sheet.offsetTop - docArea.scrollTop;
+    const contentScrolled = Math.max(0, -sheetTopInDocArea - A4_PAD_TOP + docArea.clientHeight / 2);
+    const currentPage = Math.floor(contentScrolled / A4_CONTENT) + 1;
+    pgBadge.textContent = Math.max(1, currentPage);
+  }
+
+  const docAreaEl = document.querySelector('.doc-area');
+  if (docAreaEl) {
+    docAreaEl.addEventListener('scroll', updateCurrentPageBadge, { passive: true });
+  }
+
   tp.sections.forEach((sec, idx) => {
-    // Outer wrapper (page gap / shadow layer)
-    const pageWrap = document.createElement('div');
-    pageWrap.className = 'a4-page-wrap';
-
-    // The A4 sheet itself
-    const sheet = document.createElement('div');
-    sheet.className = 'a4-page-sheet';
-    sheet.dataset.sid = sec.id;
-
-    // Page number badge
-    const pgNum = document.createElement('div');
-    pgNum.className = 'a4-page-number';
-    pgNum.textContent = `${idx + 1}`;
-    sheet.appendChild(pgNum);
+    // Section wrapper (no page boundary enforced)
+    const secWrap = document.createElement('div');
+    secWrap.className = 'a4-section-wrap';
+    secWrap.dataset.sid = sec.id;
 
     // Section header (title + collapse toggle)
     const secHeader = document.createElement('div');
@@ -296,7 +348,7 @@ function renderPage() {
     const isOpen = sec.open !== false;
     const hasContent = sec.content && sec.content.trim().length > 0;
     secHeader.innerHTML = `<span class="a4-sec-toggle ${isOpen ? 'open' : ''}">›</span><span class="a4-sec-title">${escHtml(sec.title)}</span><span class="section-status ${hasContent ? 'has-content' : ''}">${hasContent ? 'Has content' : 'Empty'}</span>`;
-    sheet.appendChild(secHeader);
+    secWrap.appendChild(secHeader);
 
     // Section body (the actual editor)
     const secBody = document.createElement('div');
@@ -317,9 +369,8 @@ function renderPage() {
       aiBtn.addEventListener('click', () => openAIGenForSection(sec));
       secBody.appendChild(aiBtn);
     }
-    sheet.appendChild(secBody);
-    pageWrap.appendChild(sheet);
-    container.appendChild(pageWrap);
+    secWrap.appendChild(secBody);
+    sheet.appendChild(secWrap);
 
     // Toggle collapse on header click
     secHeader.addEventListener('click', () => {
@@ -343,7 +394,22 @@ function renderPage() {
     secEditor.addEventListener('click', e => { const a = e.target.closest('a'); if (a && a.href) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); } });
     secEditor.addEventListener('input', () => setTimeout(updateHL, 80));
     secEditor.addEventListener('paste', e => handleEditorPaste(e, secEditor, sec));
+
+    // Update rulers whenever content changes height
+    secEditor.addEventListener('input', () => {
+      requestAnimationFrame(updatePageRulers);
+    });
   });
+
+  // Draw page rulers after initial render
+  requestAnimationFrame(() => { updatePageRulers(); updateCurrentPageBadge(); });
+
+  // Keep rulers updated when sheet resizes (images load, window resize)
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(() => updatePageRulers());
+    ro.observe(sheet);
+    container._sheetRO = ro;
+  }
 
   updateWordCount();
 }
