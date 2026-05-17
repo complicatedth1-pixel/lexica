@@ -856,9 +856,6 @@ window.toggleMarkRead = toggleMarkRead;
 (function() {
   'use strict';
 
-  const GOOGLE_API_KEY = 'AIzaSyBH61rmnhrZjwbdtIvNEo8N3a20cntTpzY';
-  const GOOGLE_CX     = '308455218f6f54e34';
-
   // ── Build selection menu DOM ──────────────────────────
   const selMenu = document.createElement('div');
   selMenu.id = 'custom-sel-menu';
@@ -877,9 +874,14 @@ window.toggleMarkRead = toggleMarkRead;
     <div id="search-modal-box">
       <div id="search-modal-header">
         <span id="search-modal-query-label"></span>
-        <button id="search-modal-close">✕</button>
+        <div id="search-modal-header-actions">
+          <button id="search-modal-newtab" title="Open in new tab">⧉ New Tab</button>
+          <button id="search-modal-close">✕</button>
+        </div>
       </div>
-      <div id="search-modal-results"></div>
+      <div id="search-modal-results">
+        <iframe id="search-modal-iframe" src="" frameborder="0" allowfullscreen></iframe>
+      </div>
       <div id="search-modal-footer">
         <span id="search-modal-status"></span>
       </div>
@@ -958,63 +960,37 @@ window.toggleMarkRead = toggleMarkRead;
     }
   });
 
-  // ── Google Search Modal ───────────────────────────────
+  // ── Bing Iframe Search Modal ───────────────────────────
   function openSearchModal(queryText) {
     _currentSearchText = queryText;
-    const label = document.getElementById('search-modal-query-label');
-    const results = document.getElementById('search-modal-results');
-    const status  = document.getElementById('search-modal-status');
+    const label  = document.getElementById('search-modal-query-label');
+    const iframe = document.getElementById('search-modal-iframe');
     label.textContent = '🔍 ' + queryText;
-    results.innerHTML = '<div class="srm-loading">Searching…</div>';
-    status.textContent = '';
+    iframe.src = 'https://www.bing.com/search?q=' + encodeURIComponent(queryText);
     searchModal.classList.add('open');
-    fetchGoogleResults(queryText).then(items => {
-      results.innerHTML = '';
-      if (!items || items.length === 0) {
-        results.innerHTML = '<div class="srm-empty">No results found.</div>';
-        return;
-      }
-      items.forEach(item => {
-        const card = document.createElement('div');
-        card.className = 'srm-card';
-        card.innerHTML = `
-          <div class="srm-card-title"><a href="${escHtml(item.link)}" target="_blank" rel="noopener">${escHtml(item.title)}</a></div>
-          <div class="srm-card-url">${escHtml(item.displayLink || item.link)}</div>
-          <div class="srm-card-snippet">${escHtml(item.snippet || '')}</div>
-          <button class="srm-add-btn" data-text="${escHtml(item.snippet || item.title)}">+ Add after selection</button>
-        `;
-        results.appendChild(card);
-      });
-    }).catch(err => {
-      results.innerHTML = '<div class="srm-empty">Search failed. Check API key/quota.</div>';
-    });
-  }
-
-  async function fetchGoogleResults(query) {
-    const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_CX}&q=${encodeURIComponent(query)}&num=10`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('API error ' + res.status);
-    const data = await res.json();
-    return data.items || [];
   }
 
   // Close modal
   document.getElementById('search-modal-close').addEventListener('click', () => {
     searchModal.classList.remove('open');
+    document.getElementById('search-modal-iframe').src = '';
   });
   searchModal.addEventListener('click', e => {
-    if (e.target === searchModal) searchModal.classList.remove('open');
+    if (e.target === searchModal) {
+      searchModal.classList.remove('open');
+      document.getElementById('search-modal-iframe').src = '';
+    }
   });
 
-  // Handle "Add" button clicks inside modal
-  document.getElementById('search-modal-results').addEventListener('click', e => {
-    const btn = e.target.closest('.srm-add-btn');
-    if (!btn) return;
-    const textToAdd = btn.dataset.text;
-    insertAfterAnchor(textToAdd);
-    document.getElementById('search-modal-status').textContent = '✓ Added';
-    setTimeout(() => { document.getElementById('search-modal-status').textContent = ''; }, 2000);
+  // New Tab button — open current query in real Bing tab
+  document.getElementById('search-modal-newtab').addEventListener('click', () => {
+    if (_currentSearchText) {
+      window.open('https://www.bing.com/search?q=' + encodeURIComponent(_currentSearchText), '_blank', 'noopener');
+    }
   });
+
+  // ── Insert after selection (manual paste workflow) ────
+  // The footer status span is kept for insertAfterAnchor feedback.
 
   function insertAfterAnchor(text) {
     if (!_anchorRange) { showToast('⚠ Lost selection anchor — click in editor first'); return; }
