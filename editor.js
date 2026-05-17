@@ -853,6 +853,7 @@ function toggleMarkRead() {
 window.toggleMarkRead = toggleMarkRead;
 
 // ── Custom Selection Menu ─────────────────────────────
+// Search modal logic lives in search-modal.js (LexicaSearch global).
 (function() {
   'use strict';
 
@@ -860,81 +861,47 @@ window.toggleMarkRead = toggleMarkRead;
   const selMenu = document.createElement('div');
   selMenu.id = 'custom-sel-menu';
   selMenu.innerHTML = `
-    <button data-action="copy" title="Copy">⎘ Copy</button>
-    <button data-action="modal" title="Search & Insert">🔍 Search</button>
+    <button data-action="copy"   title="Copy">⎘ Copy</button>
+    <button data-action="modal"  title="Search & Insert">🔍 Search</button>
     <button data-action="newtab" title="Open in new tab">⧉ New Tab</button>
-    <button data-action="ai" title="AI (coming soon)" disabled>✦ AI</button>
+    <button data-action="ai"     title="AI (coming soon)" disabled>✦ AI</button>
   `;
   document.body.appendChild(selMenu);
 
-  // ── Search modal DOM ──────────────────────────────────
-  const searchModal = document.createElement('div');
-  searchModal.id = 'search-modal-overlay';
-  searchModal.innerHTML = `
-    <div id="search-modal-box">
-      <div id="search-modal-header">
-        <span id="search-modal-query-label"></span>
-        <div id="search-modal-header-actions">
-          <button id="search-modal-newtab" title="Open in new tab">⧉ New Tab</button>
-          <button id="search-modal-close">✕</button>
-        </div>
-      </div>
-      <div id="search-modal-results">
-        <iframe id="search-modal-iframe" src="" frameborder="0" allowfullscreen></iframe>
-      </div>
-      <div id="search-modal-footer">
-        <span id="search-modal-status"></span>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(searchModal);
-
-  // Saved anchor for insertion
-  let _anchorRange = null;
-  let _currentSearchText = '';
-
-  // ── Position + show menu ──────────────────────────────
   function showSelMenu(x, y, text) {
     selMenu.style.left = x + 'px';
     selMenu.style.top  = y + 'px';
     selMenu.classList.add('visible');
     selMenu.dataset.text = text;
-    // Clip to viewport
     requestAnimationFrame(() => {
       const r = selMenu.getBoundingClientRect();
       if (r.right  > window.innerWidth  - 8) selMenu.style.left = (window.innerWidth  - r.width  - 8) + 'px';
       if (r.bottom > window.innerHeight - 8) selMenu.style.top  = (y - r.height - 10) + 'px';
     });
   }
-
   function hideSelMenu() { selMenu.classList.remove('visible'); }
 
   // ── Show on mouseup when no highlighter active ────────
   let _selTimer = null;
   document.addEventListener('mouseup', e => {
-    // Don't interfere with highlighter flow
     if (activeHlType) return;
-    // Don't trigger from our own UI
-    if (e.target.closest('#custom-sel-menu') || e.target.closest('#search-modal-overlay')) return;
-
+    if (e.target.closest('#custom-sel-menu') || e.target.closest('#srm-overlay')) return;
     clearTimeout(_selTimer);
     _selTimer = setTimeout(() => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || !sel.toString().trim()) { hideSelMenu(); return; }
       const text = sel.toString().trim();
-      // Copy to clipboard immediately
       try { navigator.clipboard.writeText(text); } catch(er) {}
-      // Save anchor range for insertion
-      _anchorRange = sel.getRangeAt(0).cloneRange();
-      // Position menu just above selection
+      // Pass anchor to search modal module
+      const range = sel.getRangeAt(0).cloneRange();
+      if (window.LexicaSearch) window.LexicaSearch.setAnchor(range);
       const rect = sel.getRangeAt(0).getBoundingClientRect();
       showSelMenu(rect.left + window.scrollX, rect.top + window.scrollY - 42, text);
-    }, 350); // 350ms hold — avoids firing on quick deletes
+    }, 350);
   });
 
-  // Hide on click outside
   document.addEventListener('mousedown', e => {
-    if (!e.target.closest('#custom-sel-menu') && !e.target.closest('#search-modal-overlay')) {
+    if (!e.target.closest('#custom-sel-menu') && !e.target.closest('#srm-overlay')) {
       hideSelMenu();
     }
   });
@@ -944,84 +911,21 @@ window.toggleMarkRead = toggleMarkRead;
     const btn = e.target.closest('button');
     if (!btn) return;
     const action = btn.dataset.action;
-    const text = selMenu.dataset.text;
+    const text   = selMenu.dataset.text;
     if (action === 'copy') {
       navigator.clipboard.writeText(text).then(() => showToast('✓ Copied'));
       hideSelMenu();
     } else if (action === 'modal') {
       hideSelMenu();
-      openSearchModal(text);
+      if (window.LexicaSearch) window.LexicaSearch.open(text);
     } else if (action === 'newtab') {
-      window.open('https://www.google.com/search?q=' + encodeURIComponent(text), '_blank', 'noopener');
+      window.open('https://www.bing.com/search?q=' + encodeURIComponent(text), '_blank', 'noopener');
       hideSelMenu();
     } else if (action === 'ai') {
       showToast('AI feature coming soon');
       hideSelMenu();
     }
   });
-
-  // ── Bing Iframe Search Modal ───────────────────────────
-  function openSearchModal(queryText) {
-    _currentSearchText = queryText;
-    const label  = document.getElementById('search-modal-query-label');
-    const iframe = document.getElementById('search-modal-iframe');
-    label.textContent = '🔍 ' + queryText;
-    iframe.src = 'https://www.bing.com/search?q=' + encodeURIComponent(queryText);
-    searchModal.classList.add('open');
-  }
-
-  // Close modal
-  document.getElementById('search-modal-close').addEventListener('click', () => {
-    searchModal.classList.remove('open');
-    document.getElementById('search-modal-iframe').src = '';
-  });
-  searchModal.addEventListener('click', e => {
-    if (e.target === searchModal) {
-      searchModal.classList.remove('open');
-      document.getElementById('search-modal-iframe').src = '';
-    }
-  });
-
-  // New Tab button — open current query in real Bing tab
-  document.getElementById('search-modal-newtab').addEventListener('click', () => {
-    if (_currentSearchText) {
-      window.open('https://www.bing.com/search?q=' + encodeURIComponent(_currentSearchText), '_blank', 'noopener');
-    }
-  });
-
-  // ── Insert after selection (manual paste workflow) ────
-  // The footer status span is kept for insertAfterAnchor feedback.
-
-  function insertAfterAnchor(text) {
-    if (!_anchorRange) { showToast('⚠ Lost selection anchor — click in editor first'); return; }
-    try {
-      // Validate anchor nodes still attached
-      if (!document.contains(_anchorRange.startContainer)) { showToast('⚠ Selection is no longer valid'); return; }
-      // Move to end of original selection
-      const insertRange = _anchorRange.cloneRange();
-      insertRange.collapse(false); // collapse to end
-
-      // Build a visually distinguished span
-      const span = document.createElement('span');
-      span.className = 'inserted-text-span';
-      span.setAttribute('data-inserted', 'true');
-      span.textContent = ' [' + text + ']';
-
-      insertRange.insertNode(span);
-      // Move cursor after inserted span
-      const afterRange = document.createRange();
-      afterRange.setStartAfter(span);
-      afterRange.collapse(true);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(afterRange);
-
-      // Trigger autosave
-      triggerAutosave();
-    } catch(err) {
-      showToast('⚠ Could not insert text');
-    }
-  }
 })();
 
 // ── Init ──────────────────────────────────────────────

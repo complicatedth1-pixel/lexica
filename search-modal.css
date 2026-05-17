@@ -1,0 +1,408 @@
+/* ══════════════════════════════════════════════════════════════════
+   Lexica — Search Modal  (search-modal.css)
+   Standalone styles for #srm-overlay and all children.
+   Lexica palette: bg #16121e, amber #d4872a, blue #a0c8ff,
+   cream #e8d8c0, cream2 #c8b8a0, green #6adf6a
+   Fonts: Cormorant Garamond (serif), Outfit (sans)
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Variables (local scope) ──────────────────────────────────────── */
+#srm-overlay {
+  --srm-bg:          #13101a;
+  --srm-surface:     #1a1525;
+  --srm-surface2:    #211c2e;
+  --srm-border:      rgba(212,135,42,0.22);
+  --srm-border2:     rgba(255,255,255,0.07);
+  --srm-amber:       #d4872a;
+  --srm-amber-dim:   rgba(212,135,42,0.18);
+  --srm-amber-glow:  rgba(212,135,42,0.08);
+  --srm-blue:        #a0c8ff;
+  --srm-blue-dim:    rgba(160,200,255,0.12);
+  --srm-cream:       #e8d8c0;
+  --srm-cream2:      #c8b8a0;
+  --srm-cream-dim:   rgba(232,216,192,0.45);
+  --srm-green:       #6adf6a;
+  --srm-muted:       rgba(200,184,160,0.38);
+  --srm-radius:      12px;
+  --srm-radius-sm:   7px;
+  --srm-shadow:      0 32px 96px rgba(0,0,0,0.82), 0 0 0 1px rgba(212,135,42,0.14);
+  --srm-transition:  0.22s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* ── Overlay backdrop ─────────────────────────────────────────────── */
+#srm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(6,4,12,0.72);
+  backdrop-filter: blur(10px) saturate(0.7);
+  -webkit-backdrop-filter: blur(10px) saturate(0.7);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--srm-transition);
+}
+#srm-overlay.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* ── Modal box ────────────────────────────────────────────────────── */
+#srm-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(980px, 100%);
+  height: min(90vh, 820px);
+  background: var(--srm-bg);
+  border: 1px solid var(--srm-border);
+  border-radius: var(--srm-radius);
+  box-shadow: var(--srm-shadow);
+  overflow: hidden;
+  transform: translateY(10px) scale(0.985);
+  transition: transform var(--srm-transition);
+}
+#srm-overlay.open #srm-box {
+  transform: translateY(0) scale(1);
+}
+
+/* ── Header ───────────────────────────────────────────────────────── */
+#srm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px 13px 18px;
+  background: var(--srm-surface);
+  border-bottom: 1px solid var(--srm-border2);
+  flex-shrink: 0;
+}
+#srm-header-left {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  flex: 1;
+}
+#srm-icon {
+  font-size: 15px;
+  color: var(--srm-amber);
+  opacity: 0.9;
+  flex-shrink: 0;
+  line-height: 1;
+}
+#srm-query-label {
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--srm-cream);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.01em;
+}
+#srm-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+#srm-btn-newtab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--srm-amber-dim);
+  border: 1px solid rgba(212,135,42,0.28);
+  color: var(--srm-amber);
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 11px;
+  border-radius: var(--srm-radius-sm);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+#srm-btn-newtab:hover {
+  background: rgba(212,135,42,0.28);
+  border-color: rgba(212,135,42,0.5);
+}
+#srm-btn-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--srm-cream2);
+  width: 30px;
+  height: 30px;
+  border-radius: var(--srm-radius-sm);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+#srm-btn-close:hover {
+  background: rgba(255,255,255,0.07);
+  border-color: var(--srm-border2);
+  color: var(--srm-cream);
+}
+
+/* ── Tab bar ──────────────────────────────────────────────────────── */
+#srm-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 16px;
+  background: var(--srm-surface);
+  border-bottom: 1px solid var(--srm-border2);
+  flex-shrink: 0;
+  min-height: 36px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+#srm-tabs::-webkit-scrollbar { display: none; }
+
+#srm-tab-active {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 36px;
+  background: var(--srm-bg);
+  border: 1px solid var(--srm-border2);
+  border-bottom: 1px solid var(--srm-bg);   /* merges with iframe area */
+  border-radius: 6px 6px 0 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  color: var(--srm-cream2);
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 220px;
+  overflow: hidden;
+}
+#srm-tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#srm-tab-favicon {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--srm-amber-dim);
+  flex-shrink: 0;
+  /* Will show Bing favicon if we set it as background-image */
+}
+
+#srm-tab-trail {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding-left: 4px;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+#srm-tab-trail::-webkit-scrollbar { display: none; }
+
+.srm-crumb {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  height: 28px;
+  background: none;
+  border-radius: 4px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 10.5px;
+  color: var(--srm-muted);
+  white-space: nowrap;
+  cursor: default;
+  position: relative;
+  transition: color 0.15s;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.srm-crumb::before {
+  content: '›';
+  margin-right: 6px;
+  color: var(--srm-border);
+  flex-shrink: 0;
+}
+.srm-crumb:hover { color: var(--srm-cream2); }
+
+/* ── Loading bar ──────────────────────────────────────────────────── */
+#srm-loading-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+#srm-loading-bar.active { opacity: 1; }
+#srm-loading-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--srm-amber) 0%, #f0b060 100%);
+  border-radius: 0 2px 2px 0;
+  box-shadow: 0 0 8px rgba(212,135,42,0.7);
+}
+
+/* ── Iframe wrapper ───────────────────────────────────────────────── */
+#srm-iframe-wrap {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+}
+#srm-iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+
+/* ── Action bar (floats above iframe on selection) ─────────────────── */
+#srm-action-bar {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%) translateY(6px);
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--srm-surface);
+  border: 1px solid var(--srm-border);
+  border-radius: 40px;
+  padding: 5px 6px 5px 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 0 1px rgba(212,135,42,0.1);
+  z-index: 20;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.34,1.56,0.64,1);
+  white-space: nowrap;
+  max-width: calc(100% - 32px);
+}
+#srm-action-bar.visible {
+  opacity: 1;
+  pointer-events: all;
+  transform: translateX(-50%) translateY(0);
+}
+#srm-action-preview {
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  color: var(--srm-muted);
+  font-style: italic;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+  margin-right: 8px;
+}
+#srm-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.srm-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  color: var(--srm-cream2);
+  font-family: 'Outfit', sans-serif;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 6px 11px;
+  border-radius: 30px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+.srm-action-btn svg { flex-shrink: 0; opacity: 0.8; }
+.srm-action-btn:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--srm-cream);
+}
+/* Highlight the primary "Add" button */
+.srm-action-btn[data-action="insert"] {
+  background: var(--srm-amber-dim);
+  color: var(--srm-amber);
+  border: 1px solid rgba(212,135,42,0.25);
+}
+.srm-action-btn[data-action="insert"]:hover {
+  background: rgba(212,135,42,0.28);
+  border-color: rgba(212,135,42,0.5);
+}
+
+/* Dividers between buttons */
+.srm-action-btn + .srm-action-btn {
+  position: relative;
+}
+.srm-action-btn + .srm-action-btn::before {
+  content: '';
+  position: absolute;
+  left: -1.5px;
+  top: 20%;
+  height: 60%;
+  width: 1px;
+  background: var(--srm-border2);
+}
+
+/* ── Footer ───────────────────────────────────────────────────────── */
+#srm-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 18px;
+  background: var(--srm-surface);
+  border-top: 1px solid var(--srm-border2);
+  flex-shrink: 0;
+  min-height: 32px;
+  gap: 12px;
+}
+#srm-footer-hint {
+  font-family: 'Outfit', sans-serif;
+  font-size: 10.5px;
+  color: var(--srm-muted);
+  font-style: italic;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#srm-footer-status {
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  color: var(--srm-green);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+/* ── Inserted text in editor ──────────────────────────────────────── */
+span[data-inserted="true"],
+.inserted-text-span {
+  background: rgba(100,200,160,0.14);
+  border: 1px solid rgba(100,200,160,0.32);
+  border-radius: 3px;
+  color: #7dd8b0;
+  padding: 1px 4px;
+  font-style: italic;
+  font-size: 0.94em;
+  margin-left: 3px;
+  position: relative;
+}
