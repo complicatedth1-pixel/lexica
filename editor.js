@@ -243,7 +243,13 @@ function renderPage() {
   titleBar.style.display = 'block';
   titleBar.style.marginBottom = '0';
   topicLabel.textContent = tp.name; chapterLabel.textContent = ch ? '— ' + ch.name : '';
-  if (!swRunning) { swElapsed = tp.timeSpent || 0; swSessionElapsed = 0; swDisplay.textContent = swElapsed > 0 ? swFormat(swElapsed) : '00:00'; }
+  window._currentA4Page = 1; // reset on topic switch; will be updated after scroll
+  if (!swRunning) {
+    if (!tp.pageTimes) tp.pageTimes = {};
+    swElapsed = tp.pageTimes[1] || 0;
+    swSessionElapsed = 0;
+    swDisplay.textContent = swElapsed > 0 ? swFormat(swElapsed) : '00:00';
+  }
   if (ch && ch.topics) { const pn = ch.topics.findIndex(t => t.id === tp.id) + 1; pageProgress.textContent = `Page ${pn} of ${ch.topics.length}`; }
   const markBtn = document.getElementById('markReadBtn');
   if (markBtn) {
@@ -327,8 +333,14 @@ function renderPage() {
     if (!docArea) return;
     const sheetTopInDocArea = sheet.offsetTop - docArea.scrollTop;
     const contentScrolled = Math.max(0, -sheetTopInDocArea - A4_PAD_TOP + docArea.clientHeight / 2);
-    const currentPage = Math.floor(contentScrolled / A4_CONTENT) + 1;
-    pgBadge.textContent = Math.max(1, currentPage);
+    const currentPage = Math.max(1, Math.floor(contentScrolled / A4_CONTENT) + 1);
+    pgBadge.textContent = currentPage;
+    // Expose globally so stopwatch.js can track per-page time
+    const prev = window._currentA4Page;
+    window._currentA4Page = currentPage;
+    if (prev !== currentPage) {
+      document.dispatchEvent(new CustomEvent('a4pagechange', { detail: { from: prev, to: currentPage, topicId: selectedTopicId, chapterId: selectedChapterId } }));
+    }
   }
 
   const docAreaEl = document.querySelector('.doc-area');
@@ -839,6 +851,202 @@ function toggleMarkRead() {
   showToast(tp.isRead ? '✓ Marked as read' : '○ Marked as unread');
 }
 window.toggleMarkRead = toggleMarkRead;
+
+// ── Custom Selection Menu ─────────────────────────────
+(function() {
+  'use strict';
+
+  const GOOGLE_API_KEY = 'AIzaSyBH61rmnhrZjwbdtIvNEo8N3a20cntTpzY';
+  const GOOGLE_CX     = '308455218f6f54e34';
+
+  // ── Build selection menu DOM ──────────────────────────
+  const selMenu = document.createElement('div');
+  selMenu.id = 'custom-sel-menu';
+  selMenu.innerHTML = `
+    <button data-action="copy" title="Copy">⎘ Copy</button>
+    <button data-action="modal" title="Search & Insert">🔍 Search</button>
+    <button data-action="newtab" title="Open in new tab">⧉ New Tab</button>
+    <button data-action="ai" title="AI (coming soon)" disabled>✦ AI</button>
+  `;
+  document.body.appendChild(selMenu);
+
+  // ── Search modal DOM ──────────────────────────────────
+  const searchModal = document.createElement('div');
+  searchModal.id = 'search-modal-overlay';
+  searchModal.innerHTML = `
+    <div id="search-modal-box">
+      <div id="search-modal-header">
+        <span id="search-modal-query-label"></span>
+        <button id="search-modal-close">✕</button>
+      </div>
+      <div id="search-modal-results"></div>
+      <div id="search-modal-footer">
+        <span id="search-modal-status"></span>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(searchModal);
+
+  // Saved anchor for insertion
+  let _anchorRange = null;
+  let _currentSearchText = '';
+
+  // ── Position + show menu ──────────────────────────────
+  function showSelMenu(x, y, text) {
+    selMenu.style.left = x + 'px';
+    selMenu.style.top  = y + 'px';
+    selMenu.classList.add('visible');
+    selMenu.dataset.text = text;
+    // Clip to viewport
+    requestAnimationFrame(() => {
+      const r = selMenu.getBoundingClientRect();
+      if (r.right  > window.innerWidth  - 8) selMenu.style.left = (window.innerWidth  - r.width  - 8) + 'px';
+      if (r.bottom > window.innerHeight - 8) selMenu.style.top  = (y - r.height - 10) + 'px';
+    });
+  }
+
+  function hideSelMenu() { selMenu.classList.remove('visible'); }
+
+  // ── Show on mouseup when no highlighter active ────────
+  let _selTimer = null;
+  document.addEventListener('mouseup', e => {
+    // Don't interfere with highlighter flow
+    if (activeHlType) return;
+    // Don't trigger from our own UI
+    if (e.target.closest('#custom-sel-menu') || e.target.closest('#search-modal-overlay')) return;
+
+    clearTimeout(_selTimer);
+    _selTimer = setTimeout(() => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.toString().trim()) { hideSelMenu(); return; }
+      const text = sel.toString().trim();
+      // Copy to clipboard immediately
+      try { navigator.clipboard.writeText(text); } catch(er) {}
+      // Save anchor range for insertion
+      _anchorRange = sel.getRangeAt(0).cloneRange();
+      // Position menu just above selection
+      const rect = sel.getRangeAt(0).getBoundingClientRect();
+      showSelMenu(rect.left + window.scrollX, rect.top + window.scrollY - 42, text);
+    }, 350); // 350ms hold — avoids firing on quick deletes
+  });
+
+  // Hide on click outside
+  document.addEventListener('mousedown', e => {
+    if (!e.target.closest('#custom-sel-menu') && !e.target.closest('#search-modal-overlay')) {
+      hideSelMenu();
+    }
+  });
+
+  // ── Menu button actions ───────────────────────────────
+  selMenu.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    const text = selMenu.dataset.text;
+    if (action === 'copy') {
+      navigator.clipboard.writeText(text).then(() => showToast('✓ Copied'));
+      hideSelMenu();
+    } else if (action === 'modal') {
+      hideSelMenu();
+      openSearchModal(text);
+    } else if (action === 'newtab') {
+      window.open('https://www.google.com/search?q=' + encodeURIComponent(text), '_blank', 'noopener');
+      hideSelMenu();
+    } else if (action === 'ai') {
+      showToast('AI feature coming soon');
+      hideSelMenu();
+    }
+  });
+
+  // ── Google Search Modal ───────────────────────────────
+  function openSearchModal(queryText) {
+    _currentSearchText = queryText;
+    const label = document.getElementById('search-modal-query-label');
+    const results = document.getElementById('search-modal-results');
+    const status  = document.getElementById('search-modal-status');
+    label.textContent = '🔍 ' + queryText;
+    results.innerHTML = '<div class="srm-loading">Searching…</div>';
+    status.textContent = '';
+    searchModal.classList.add('open');
+    fetchGoogleResults(queryText).then(items => {
+      results.innerHTML = '';
+      if (!items || items.length === 0) {
+        results.innerHTML = '<div class="srm-empty">No results found.</div>';
+        return;
+      }
+      items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'srm-card';
+        card.innerHTML = `
+          <div class="srm-card-title"><a href="${escHtml(item.link)}" target="_blank" rel="noopener">${escHtml(item.title)}</a></div>
+          <div class="srm-card-url">${escHtml(item.displayLink || item.link)}</div>
+          <div class="srm-card-snippet">${escHtml(item.snippet || '')}</div>
+          <button class="srm-add-btn" data-text="${escHtml(item.snippet || item.title)}">+ Add after selection</button>
+        `;
+        results.appendChild(card);
+      });
+    }).catch(err => {
+      results.innerHTML = '<div class="srm-empty">Search failed. Check API key/quota.</div>';
+    });
+  }
+
+  async function fetchGoogleResults(query) {
+    const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_CX}&q=${encodeURIComponent(query)}&num=10`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('API error ' + res.status);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  // Close modal
+  document.getElementById('search-modal-close').addEventListener('click', () => {
+    searchModal.classList.remove('open');
+  });
+  searchModal.addEventListener('click', e => {
+    if (e.target === searchModal) searchModal.classList.remove('open');
+  });
+
+  // Handle "Add" button clicks inside modal
+  document.getElementById('search-modal-results').addEventListener('click', e => {
+    const btn = e.target.closest('.srm-add-btn');
+    if (!btn) return;
+    const textToAdd = btn.dataset.text;
+    insertAfterAnchor(textToAdd);
+    document.getElementById('search-modal-status').textContent = '✓ Added';
+    setTimeout(() => { document.getElementById('search-modal-status').textContent = ''; }, 2000);
+  });
+
+  function insertAfterAnchor(text) {
+    if (!_anchorRange) { showToast('⚠ Lost selection anchor — click in editor first'); return; }
+    try {
+      // Validate anchor nodes still attached
+      if (!document.contains(_anchorRange.startContainer)) { showToast('⚠ Selection is no longer valid'); return; }
+      // Move to end of original selection
+      const insertRange = _anchorRange.cloneRange();
+      insertRange.collapse(false); // collapse to end
+
+      // Build a visually distinguished span
+      const span = document.createElement('span');
+      span.className = 'inserted-text-span';
+      span.setAttribute('data-inserted', 'true');
+      span.textContent = ' [' + text + ']';
+
+      insertRange.insertNode(span);
+      // Move cursor after inserted span
+      const afterRange = document.createRange();
+      afterRange.setStartAfter(span);
+      afterRange.collapse(true);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(afterRange);
+
+      // Trigger autosave
+      triggerAutosave();
+    } catch(err) {
+      showToast('⚠ Could not insert text');
+    }
+  }
+})();
 
 // ── Init ──────────────────────────────────────────────
 renderTree(); renderPage(); renderHomepage(); updateHL();
