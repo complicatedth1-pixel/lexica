@@ -100,9 +100,61 @@
 /* ── CANVAS / EDITOR ── */
 .bg-canvas { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
 .bg-layer { position: absolute; inset: 0; z-index: 0; background-color: #e8e0d2; background-image: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(140,120,90,0.04) 3px, rgba(140,120,90,0.04) 4px), repeating-linear-gradient(90deg, transparent, transparent 4px, rgba(140,120,90,0.03) 4px, rgba(140,120,90,0.03) 5px), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='250'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='5' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='250' height='250' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E"); background-size: auto, auto, 250px 250px; }
-.doc-area { flex: 1; overflow-y: auto; position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; padding: 24px 12px 80px; scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.1) transparent; -webkit-overflow-scrolling: touch; }
+.doc-area { flex: 1; overflow-y: auto; position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; padding: 24px 12px 80px; scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.1) transparent; -webkit-overflow-scrolling: touch; background: #d0c8b8; }
 
-.page-card { width: 100%; max-width: calc(var(--text-width) + 80px); padding: 32px 24px 60px; border-radius: 8px; background: rgba(255,252,245,0.88); backdrop-filter: blur(28px) saturate(1.2); -webkit-backdrop-filter: blur(28px) saturate(1.2); border: 1px solid rgba(200,185,160,0.45); box-shadow: 0 10px 60px rgba(100,80,40,0.1), 0 2px 0 rgba(255,255,255,0.7) inset; color: #28200e; }
+/* ── A4 multi-page layout ── */
+#pageCard { width: 100%; display: flex; flex-direction: column; align-items: center; }
+
+/* Topic header strip — above all page sheets */
+.a4-topic-header { width: 100%; max-width: 794px; padding: 10px 16px 8px; margin-bottom: 4px; display: flex; flex-direction: column; }
+.a4-topic-name { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 500; color: #28200e; }
+.a4-topic-meta { font-family: sans-serif; font-size: 11px; color: #887fa0; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px; }
+
+/* Each section = one A4 page sheet */
+.a4-page-wrap { width: 100%; max-width: 794px; margin-bottom: 20px; position: relative; }
+.a4-page-sheet { width: 100%; min-height: 1123px; /* A4 at 96dpi */ background: rgba(255,252,245,0.97); border: 1px solid rgba(200,185,160,0.45); border-radius: 2px; box-shadow: 0 4px 24px rgba(100,80,40,0.14), 0 1px 0 rgba(255,255,255,0.8) inset; position: relative; padding: 56px 64px 72px; box-sizing: border-box; color: #28200e; }
+
+/* Page number badge in top-right corner of sheet */
+.a4-page-number { position: absolute; top: 18px; right: 22px; font-family: sans-serif; font-size: 10px; color: rgba(120,100,70,0.5); letter-spacing: 0.08em; user-select: none; }
+
+/* Section title bar at top of each sheet */
+.a4-section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; padding-bottom: 10px; border-bottom: 1px solid rgba(180,160,120,0.3); cursor: pointer; user-select: none; }
+.a4-sec-toggle { font-size: 14px; color: #887fa0; transition: transform 0.18s; flex-shrink: 0; display: inline-block; }
+.a4-sec-toggle.open { transform: rotate(90deg); }
+.a4-sec-title { font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #554e68; flex: 1; }
+
+/* Section body + collapse */
+.a4-section-body { }
+.a4-section-body.collapsed { display: none; }
+
+/* The actual contenteditable writing area */
+.a4-section-editor { font-family: var(--font); font-size: var(--font-size); line-height: var(--line-height); color: #28200e; outline: none; min-height: 900px; caret-color: #7a5c2a; }
+.a4-section-editor:empty::before { content: 'Start writing…'; opacity: .25; font-style: italic; pointer-events: none; }
+.a4-section-editor p { margin-bottom: 1.2em; }
+.a4-section-editor h3 { font-size: 1rem; font-weight: 700; margin: 1.5em 0 .6em; color: #3a2c1a; }
+.a4-section-editor h4 { font-size: .9rem; font-weight: 600; margin: 1.2em 0 .4em; color: #5a4030; }
+.a4-section-editor ul, .a4-section-editor ol { margin-left: 1.4em; margin-bottom: 1em; }
+.a4-section-editor li { margin-bottom: .4em; }
+.a4-section-editor a { color: #2255a4; text-underline-offset: 3px; }
+.a4-section-editor img { max-width: 100%; height: auto; display: block; margin: 0.5em 0; border-radius: 4px; }
+.a4-section-editor table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 0.8em 0; }
+.a4-section-editor td, .a4-section-editor th { border: 1px solid rgba(100,80,40,0.3); padding: 4px 8px; word-break: break-word; text-align: left; }
+.a4-section-editor th { background: rgba(100,80,40,0.08); font-weight: 600; }
+
+/* Plain editor (no topic selected) still shows as a sheet */
+.editor.a4-editor-standalone { background: rgba(255,252,245,0.97); border: 1px solid rgba(200,185,160,0.45); border-radius: 2px; box-shadow: 0 4px 24px rgba(100,80,40,0.14); min-height: 1123px; width: 100%; max-width: 794px; padding: 56px 64px 72px; box-sizing: border-box; margin: 0 auto; }
+
+/* autosave indicator */
+#autosaveIndicator { position: absolute; top: 12px; right: 12px; }
+
+/* pageTitleBar hidden — we show it via a4-topic-header instead */
+#pageTitleBar { display: none !important; }
+
+@media (max-width: 900px) {
+  .a4-page-sheet { min-height: auto; padding: 32px 24px 48px; }
+  .a4-section-editor { min-height: 400px; }
+  .editor.a4-editor-standalone { min-height: 500px; padding: 32px 20px; }
+}
 
 .editor { font-family: var(--font); font-size: var(--font-size); line-height: var(--line-height); color: inherit; outline: none; min-height: 360px; max-width: var(--text-width); margin: 0 auto; caret-color: #7a5c2a; }
 .editor p { margin-bottom: 1.5em; }

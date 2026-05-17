@@ -228,13 +228,23 @@ function renderPage() {
   const titleBar = document.getElementById('pageTitleBar'), topicLabel = document.getElementById('pageTopicLabel');
   const chapterLabel = document.getElementById('pageChapterLabel'), pageProgress = document.getElementById('pageProgress');
   const tp = getSelectedTopic();
-  if (!tp) { container.innerHTML = ''; plainEditor.style.display = 'block'; titleBar.style.display = 'none'; const markBtn = document.getElementById('markReadBtn'); if (markBtn) markBtn.style.display = 'none'; updateWordCount(); return; }
+  if (!tp) {
+    container.innerHTML = '';
+    plainEditor.style.display = 'block';
+    titleBar.style.display = 'none';
+    // Show plain editor as a single A4 sheet
+    plainEditor.classList.add('a4-editor-standalone');
+    const markBtn = document.getElementById('markReadBtn'); if (markBtn) markBtn.style.display = 'none';
+    updateWordCount(); return;
+  }
   const ch = getChapter(selectedChapterId);
-  plainEditor.style.display = 'none'; titleBar.style.display = 'block';
+  plainEditor.style.display = 'none';
+  plainEditor.classList.remove('a4-editor-standalone');
+  titleBar.style.display = 'block';
+  titleBar.style.marginBottom = '0';
   topicLabel.textContent = tp.name; chapterLabel.textContent = ch ? '— ' + ch.name : '';
   if (!swRunning) { swElapsed = tp.timeSpent || 0; swSessionElapsed = 0; swDisplay.textContent = swElapsed > 0 ? swFormat(swElapsed) : '00:00'; }
   if (ch && ch.topics) { const pn = ch.topics.findIndex(t => t.id === tp.id) + 1; pageProgress.textContent = `Page ${pn} of ${ch.topics.length}`; }
-  // Show mark-as-read button and set its state
   const markBtn = document.getElementById('markReadBtn');
   if (markBtn) {
     markBtn.style.display = 'block';
@@ -245,25 +255,96 @@ function renderPage() {
     markBtn.style.borderColor = isRead ? 'rgba(106,223,106,0.5)' : 'var(--border-color)';
   }
   if (!tp.sections) tp.sections = [];
-  if (tp.sections.length === 0) { container.innerHTML = `<div style="padding:20px 0;text-align:center;font-family:sans-serif;font-size:13px;color:#a09080;font-style:italic;">No sections yet. Click <strong style="color:#c0b8d0;">⊞ Sections</strong> to add sections.</div>`; updateWordCount(); return; }
+
+  // ── A4 multi-page: wrap each section in its own page sheet ──
+  // The topic title banner is a fixed header outside the sheets
   container.innerHTML = '';
-  tp.sections.forEach(sec => {
-    const block = document.createElement('div'); block.className = 'section-block'; block.dataset.sid = sec.id;
-    const hasContent = sec.content && sec.content.trim().length > 0;
+
+  // Topic header card (not an A4 sheet, just a label strip)
+  const headerSheet = document.createElement('div');
+  headerSheet.className = 'a4-topic-header';
+  headerSheet.innerHTML = `<div class="a4-topic-name">${escHtml(tp.name)}</div><div class="a4-topic-meta">${ch ? escHtml(ch.name) : ''} ${pageProgress.textContent ? '· ' + pageProgress.textContent : ''}</div>`;
+  container.appendChild(headerSheet);
+
+  if (tp.sections.length === 0) {
+    const emptySheet = document.createElement('div');
+    emptySheet.className = 'a4-page-sheet';
+    emptySheet.innerHTML = `<div style="padding:40px 0;text-align:center;font-family:sans-serif;font-size:13px;color:#a09080;font-style:italic;">No sections yet. Click <strong style="color:#c0b8d0;">⊞ Sections</strong> to add sections.</div>`;
+    container.appendChild(emptySheet);
+    updateWordCount(); return;
+  }
+
+  tp.sections.forEach((sec, idx) => {
+    // Outer wrapper (page gap / shadow layer)
+    const pageWrap = document.createElement('div');
+    pageWrap.className = 'a4-page-wrap';
+
+    // The A4 sheet itself
+    const sheet = document.createElement('div');
+    sheet.className = 'a4-page-sheet';
+    sheet.dataset.sid = sec.id;
+
+    // Page number badge
+    const pgNum = document.createElement('div');
+    pgNum.className = 'a4-page-number';
+    pgNum.textContent = `${idx + 1}`;
+    sheet.appendChild(pgNum);
+
+    // Section header (title + collapse toggle)
+    const secHeader = document.createElement('div');
+    secHeader.className = 'a4-section-header';
     const isOpen = sec.open !== false;
-    block.innerHTML = `<div class="section-header" data-sid="${sec.id}"><span class="section-toggle-icon ${isOpen?'open':''}">›</span><span class="section-title-label">${escHtml(sec.title)}</span><span class="section-status ${hasContent?'has-content':''}">${hasContent?'Has content':'Empty'}</span></div><div class="section-body ${isOpen?'':'collapsed'}"><div class="section-editor" contenteditable="true" data-sid="${sec.id}">${sec.content||''}</div>${!hasContent ? '<button class="ai-gen-btn" data-sid="' + sec.id + '">✨ Generate with AI</button>' : ''}</div>`;
-    block.querySelector('.section-header').addEventListener('click', () => { sec.open = sec.open === false; block.querySelector('.section-toggle-icon').classList.toggle('open', sec.open !== false); block.querySelector('.section-body').classList.toggle('collapsed', sec.open === false); });
-    const secEditor = block.querySelector('.section-editor');
+    const hasContent = sec.content && sec.content.trim().length > 0;
+    secHeader.innerHTML = `<span class="a4-sec-toggle ${isOpen ? 'open' : ''}">›</span><span class="a4-sec-title">${escHtml(sec.title)}</span><span class="section-status ${hasContent ? 'has-content' : ''}">${hasContent ? 'Has content' : 'Empty'}</span>`;
+    sheet.appendChild(secHeader);
+
+    // Section body (the actual editor)
+    const secBody = document.createElement('div');
+    secBody.className = 'a4-section-body' + (isOpen ? '' : ' collapsed');
+
+    const secEditor = document.createElement('div');
+    secEditor.className = 'section-editor a4-section-editor';
+    secEditor.contentEditable = 'true';
+    secEditor.dataset.sid = sec.id;
+    secEditor.innerHTML = sec.content || '';
+    secBody.appendChild(secEditor);
+
+    if (!hasContent) {
+      const aiBtn = document.createElement('button');
+      aiBtn.className = 'ai-gen-btn';
+      aiBtn.dataset.sid = sec.id;
+      aiBtn.textContent = '✨ Generate with AI';
+      aiBtn.addEventListener('click', () => openAIGenForSection(sec));
+      secBody.appendChild(aiBtn);
+    }
+    sheet.appendChild(secBody);
+    pageWrap.appendChild(sheet);
+    container.appendChild(pageWrap);
+
+    // Toggle collapse on header click
+    secHeader.addEventListener('click', () => {
+      sec.open = sec.open === false ? true : false;
+      secHeader.querySelector('.a4-sec-toggle').classList.toggle('open', sec.open !== false);
+      secBody.classList.toggle('collapsed', sec.open === false);
+    });
+
+    // Editor events
     secEditor.addEventListener('touchend', () => { setTimeout(() => captureSel(), 50); });
     secEditor.addEventListener('mouseup', () => captureSel());
     secEditor.addEventListener('keyup', () => captureSel());
-    secEditor.addEventListener('input', () => { sec.content = secEditor.innerHTML; const hasC = secEditor.textContent.trim().length > 0; block.querySelector('.section-status').textContent = hasC ? 'Has content' : 'Empty'; block.querySelector('.section-status').className = 'section-status' + (hasC ? ' has-content' : ''); const aiBtn = block.querySelector('.ai-gen-btn'); if (aiBtn && hasC) aiBtn.remove(); triggerAutosave(); updateWordCount(); });
+    secEditor.addEventListener('input', () => {
+      sec.content = secEditor.innerHTML;
+      const hasC = secEditor.textContent.trim().length > 0;
+      secHeader.querySelector('.section-status').textContent = hasC ? 'Has content' : 'Empty';
+      secHeader.querySelector('.section-status').className = 'section-status' + (hasC ? ' has-content' : '');
+      const aiBtn2 = secBody.querySelector('.ai-gen-btn'); if (aiBtn2 && hasC) aiBtn2.remove();
+      triggerAutosave(); updateWordCount();
+    });
     secEditor.addEventListener('click', e => { const a = e.target.closest('a'); if (a && a.href) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); } });
     secEditor.addEventListener('input', () => setTimeout(updateHL, 80));
     secEditor.addEventListener('paste', e => handleEditorPaste(e, secEditor, sec));
-    const aiGenBtn = block.querySelector('.ai-gen-btn'); if (aiGenBtn) aiGenBtn.addEventListener('click', () => openAIGenForSection(sec));
-    container.appendChild(block);
   });
+
   updateWordCount();
 }
 
