@@ -126,9 +126,7 @@
   height: 30px;
   caret-color: var(--srm-amber);
 }
-#srm-addressbar::placeholder {
-  color: var(--srm-muted);
-}
+#srm-addressbar::placeholder { color: var(--srm-muted); }
 #srm-addressbar-go {
   display: flex;
   align-items: center;
@@ -252,9 +250,7 @@
   background: var(--srm-amber-dim);
   flex-shrink: 0;
 }
-.srm-tab-active .srm-tab-favicon {
-  background: rgba(212,135,42,0.3);
-}
+.srm-tab-active .srm-tab-favicon { background: rgba(212,135,42,0.3); }
 .srm-tab-label {
   flex: 1;
   min-width: 0;
@@ -279,9 +275,7 @@
   padding: 0;
 }
 .srm-tab:hover .srm-tab-close,
-.srm-tab-active .srm-tab-close {
-  opacity: 1;
-}
+.srm-tab-active .srm-tab-close { opacity: 1; }
 .srm-tab-close:hover {
   background: rgba(255,255,255,0.1);
   color: var(--srm-cream);
@@ -334,17 +328,28 @@
   overflow: hidden;
   background: #fff;
   min-height: 0;
+  /* Suppress native browser context menu appearing over our action bar */
+  -webkit-user-select: none;
+  user-select: none;
 }
+/* Re-enable text selection inside the iframe itself */
+.srm-iframe {
+  -webkit-user-select: auto;
+  user-select: auto;
+}
+
 #srm-iframes-container {
   width: 100%;
   height: 100%;
 }
 .srm-iframe {
   display: none;
-  width: 100%;
-  height: 100%;
+  width: 125%;          /* compensate for zoom so content fills the frame */
+  height: 125%;
   border: none;
   background: #fff;
+  zoom: 0.8;            /* scale iframe content to 80% */
+  transform-origin: top left;
 }
 
 /* ── Selection action bar ─────────────────────────────────────────── */
@@ -441,9 +446,7 @@
   border-color: rgba(212,135,42,0.45);
 }
 /* "Search tab" — blue tint */
-.srm-action-btn[data-action="search-tab"] {
-  color: var(--srm-blue);
-}
+.srm-action-btn[data-action="search-tab"] { color: var(--srm-blue); }
 .srm-action-btn[data-action="search-tab"]:hover {
   background: var(--srm-blue-dim);
   color: #c8e0ff;

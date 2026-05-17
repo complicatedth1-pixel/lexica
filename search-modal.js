@@ -143,8 +143,10 @@
     iframe.className = 'srm-iframe';
     iframe.setAttribute('frameborder', '0');
     iframe.setAttribute('allowfullscreen', '');
-    // No allow-popups-to-escape-sandbox → links stay inside iframe/modal
-    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups');
+    // allow-same-origin needed for Bing to function; allow-popups intentionally
+    // EXCLUDED so target=_blank and window.open() links cannot escape to browser.
+    // allow-top-navigation also excluded so JS redirects can't break out.
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
     iframe.dataset.tabId = id;
     iframesContainer.appendChild(iframe);
 
@@ -165,6 +167,15 @@
 
     iframe.addEventListener('load', () => {
       finishLoadBar();
+      // Reflect navigated URL into address bar
+      try {
+        const landed = iframe.contentWindow && iframe.contentWindow.location.href;
+        if (landed && landed !== 'about:blank') {
+          tab.url = landed;
+          if (_activeTabId === id) addrBar.value = landed;
+        }
+      } catch(e) {}
+      // Update tab title
       try {
         const t = iframe.contentDocument && iframe.contentDocument.title;
         if (t && t.trim()) {
@@ -173,7 +184,33 @@
           tabEl.querySelector('.srm-tab-label').textContent = short;
         }
       } catch(e) {}
-      if (_activeTabId === id) addrBar.value = tab.iframe.src || tab.url;
+      // Inject link-intercept + contextmenu suppression into iframe DOM.
+      // Catches target=_blank clicks and routes them as new modal tabs via postMessage.
+      // Silently no-ops on cross-origin frames.
+      try {
+        const doc = iframe.contentDocument;
+        if (doc && doc.body && !doc.body.dataset.lexicaPatched) {
+          doc.body.dataset.lexicaPatched = '1';
+          const s = doc.createElement('script');
+          s.textContent = `(function(){
+            document.addEventListener('click', function(e){
+              var a = e.target.closest ? e.target.closest('a') : null;
+              if (!a) return;
+              var href = a.getAttribute('href');
+              if (!href || href.startsWith('#') || href.startsWith('javascript')) return;
+              var target = a.getAttribute('target');
+              if (target === '_blank' || target === '_new' || target === '_top') {
+                e.preventDefault();
+                e.stopPropagation();
+                try { var abs = new URL(href, location.href).href; } catch(x){ return; }
+                window.parent.postMessage({type:'srm-open-tab', url: abs}, '*');
+              }
+            }, true);
+            document.addEventListener('contextmenu', function(e){ e.preventDefault(); }, true);
+          })();`;
+          (doc.head || doc.body).appendChild(s);
+        }
+      } catch(e) {}
     });
 
     if (url) iframe.src = url;
@@ -243,6 +280,18 @@
     addrBar.focus();
   });
 
+  // ── Intercept postMessage from injected iframe script ────────────
+  window.addEventListener('message', e => {
+    if (!overlay.classList.contains('open')) return;
+    if (e.data && e.data.type === 'srm-open-tab' && e.data.url) {
+      openInNewTab(e.data.url, extractTitleFromUrl(e.data.url));
+    }
+    // Selection text relayed from iframe
+    if (e.data && e.data.type === 'srm-selection' && e.data.text) {
+      showActionBar(e.data.text);
+    }
+  });
+
   // ── Address bar ────────────────────────────────────────
   function goToAddressBar() {
     let val = addrBar.value.trim();
@@ -277,18 +326,19 @@
   }
 
   // ── Selection detection ────────────────────────────────
-  let _pollInterval = null;
-  function startSelectionPolling() {
-    clearInterval(_pollInterval);
-    _pollInterval = setInterval(() => {
-      if (!overlay.classList.contains('open')) { clearInterval(_pollInterval); return; }
-      const sel = window.getSelection();
-      if (sel && !sel.isCollapsed) {
-        const t = sel.toString().trim();
-        if (t.length > 1) { showActionBar(t); }
-      }
-    }, 400);
-  }
+  // For text selected inside the cross-origin iframe we can't read it directly.
+  // Detection works three ways:
+  //   1. Injected script relays selection via postMessage (same-origin only).
+  //   2. Browser fires a 'copy' event that bubbles to window — we read clipboard.
+  //   3. Fallback mouseup → window.getSelection() for text in our own chrome.
+
+  window.addEventListener('copy', e => {
+    if (!overlay.classList.contains('open')) return;
+    try {
+      const text = (e.clipboardData || window.clipboardData).getData('text');
+      if (text && text.trim().length > 1) showActionBar(text.trim());
+    } catch(err) {}
+  });
 
   document.getElementById('srm-iframe-wrap').addEventListener('mouseup', () => {
     if (!overlay.classList.contains('open')) return;
@@ -296,8 +346,7 @@
       const sel = window.getSelection();
       const t   = sel && !sel.isCollapsed ? sel.toString().trim() : '';
       if (t.length > 1) showActionBar(t);
-    }, 80);
-    startSelectionPolling();
+    }, 120);
   });
 
   document.getElementById('srm-header').addEventListener('mousedown', hideActionBar);
@@ -321,7 +370,6 @@
     actionBar.setAttribute('aria-hidden', 'true');
     footerHint.style.opacity = '';
     footerStat.textContent   = '';
-    clearInterval(_pollInterval);
   }
 
   actionBar.addEventListener('click', e => {
