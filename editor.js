@@ -451,53 +451,58 @@ function renderSectionsList() {
   });
 }
 
-// ── Upload Page / Chapter Modals ──────────────────────
-const uploadPageModal = document.getElementById('uploadPageModal');
+// ── Prompt builders ───────────────────────────────────
+// These pull the active preset instructions from prompt-settings.js,
+// then append a minimal structural task block so the output format
+// stays consistent regardless of which preset is active.
+
 function buildPagePrompt() {
   const tp = getSelectedTopic();
   const ch = getChapter(selectedChapterId);
   if (!tp || !ch) return '(No topic selected)';
- 
+
   const sections = (tp.sections || []).map((s, i) => `${i + 1}. ${s.title}`).join('\n');
- 
-  // Get active instructions from preset system (falls back to default if none set)
+
+  // Pull full instructions from the active preset (falls back to built-in default)
   const instructions = window.promptSettings
     ? window.promptSettings.getInstructions('page')
     : '';
- 
-  return `${instructions ? instructions + '\n\n---\n\n' : ''}TASK: Write structured lesson content for this specific page.
- 
+
+  // Append the task-specific context block.
+  // The preset's own TASK section already contains the full HTML template,
+  // so we only need to inject the live book/chapter/page/section values.
+  return `${instructions}
+
+---
+
 Book: ${bookName}
 Chapter: ${ch.name}
-Page: ${tp.name}
-Sections to cover (in order):
-${sections || '(none)'}
- 
-OUTPUT ONLY this HTML, no preamble, no markdown fences:
- 
-<!DOCTYPE html>
-<html>
-<body>
-<div class="lesson-content" data-page="${tp.name}">
-  <div class="lesson-section" data-title="[EXACT SECTION 1 TITLE]">
-    <h3>[Section 1 Title]</h3>
-    <p>Content for section 1...</p>
-  </div>
-  <div class="lesson-section" data-title="[EXACT SECTION 2 TITLE]">
-    <h3>[Section 2 Title]</h3>
-    <p>Content for section 2...</p>
-  </div>
-</div>
-</body>
-</html>
- 
-CRITICAL RULES:
-1. Each <div class="lesson-section"> must have data-title="..." that is EXACTLY the section title as listed above (character-for-character match).
-2. Output one .lesson-section per section listed — no more, no less.
-3. Use <h3> for sub-headings inside a section, <p> for paragraphs, <ul>/<ol> for lists, <blockquote> for key insights.
-4. Make content thorough — 150-400 words per section.
-5. Include clickable source links as <a href="url" target="_blank">Source</a>`;
+Page (data-page): ${tp.name}
+Sections to cover (in exact order):
+${sections || '(none defined yet — create appropriate sections for this page)'}`;
 }
+
+function buildChapterPrompt() {
+  // Pull full instructions from the active preset (falls back to built-in default)
+  const instructions = window.promptSettings
+    ? window.promptSettings.getInstructions('index')
+    : '';
+
+  // Append the task-specific context block.
+  // The preset's own TASK section already contains the full HTML template
+  // (with .page and .section divs). We only inject the book name and topic placeholder.
+  return `${instructions}
+
+---
+
+Book: ${bookName}
+
+Topic to structure: [YOUR TOPIC HERE]`;
+}
+
+// ── Upload Page / Chapter Modals ──────────────────────
+const uploadPageModal = document.getElementById('uploadPageModal');
+
 document.getElementById('uploadPageBtn').addEventListener('click', () => {
   document.getElementById('pagePromptBox').textContent = buildPagePrompt();
   document.getElementById('uploadPageStatus').textContent = '';
@@ -507,37 +512,7 @@ document.getElementById('uploadPageClose').addEventListener('click', () => uploa
 uploadPageModal.addEventListener('click', e => { if (e.target === uploadPageModal) uploadPageModal.classList.remove('open'); });
 
 const uploadChapterModal = document.getElementById('uploadChapterModal');
-function buildChapterPrompt() {
-  const instructions = window.promptSettings
-    ? window.promptSettings.getInstructions('index')
-    : '';
- 
-  return `${instructions ? instructions + '\n\n---\n\n' : ''}TASK: Create a complete chapter structure with pages for the topic I give you.
- 
-Book: ${bookName}
- 
-OUTPUT ONLY this HTML, no explanation:
- 
-<!DOCTYPE html>
-<html>
-<body>
-<div class="brain-index">
-  <h1>[CHAPTER NAME]</h1>
-  <div class="page" order="1">[Page 1 Title]</div>
-  <div class="page" order="2">[Page 2 Title]</div>
-  <div class="page" order="3">[Page 3 Title]</div>
-</div>
-</body>
-</html>
- 
-Rules:
-- h1 = exact chapter name
-- Each .page = one learnable topic (4-8 pages per chapter)
-- Page titles should be specific and action-oriented (e.g. "1.1 Agriculture ka structural paradox" not just "Agriculture")
-- Order attribute determines sequence
- 
-Now create chapter and pages for: [YOUR TOPIC HERE]`;
-}
+
 document.getElementById('uploadChapterBtn').addEventListener('click', () => {
   document.getElementById('chapterPromptBox').textContent = buildChapterPrompt();
   document.getElementById('uploadChapterStatus').textContent = '';
@@ -556,10 +531,39 @@ document.getElementById('uploadChapterFile').addEventListener('change', function
       const chName = (indexEl.querySelector('h1') || {}).textContent?.trim() || 'New Chapter';
       const pageEls = Array.from(indexEl.querySelectorAll('.page')).sort((a,b) => parseInt(a.getAttribute('order')||0)-parseInt(b.getAttribute('order')||0));
       if (!pageEls.length) { status.textContent = '❌ No page elements found'; status.style.color = '#ff7070'; return; }
-      const ch = { id: uid(), name: chName, open: true, topics: pageEls.map(p => { const name = p.textContent.trim().split('\n')[0].trim(); const sectionEls = Array.from(p.querySelectorAll('.section')).sort((a,b) => parseFloat(a.getAttribute('order')||0)-parseFloat(b.getAttribute('order')||0)); return { id: uid(), name, sections: sectionEls.map(s => ({ id: uid(), title: s.textContent.trim(), content: '', open: true })) }; }) };
+      const ch = {
+        id: uid(),
+        name: chName,
+        open: true,
+        topics: pageEls.map(p => {
+          // Page title: first line of text content (excludes nested .section text)
+          const titleNode = p.querySelector('.page-title');
+          const name = titleNode
+            ? titleNode.textContent.trim()
+            : p.childNodes[0]?.textContent?.trim() || p.textContent.trim().split('\n')[0].trim();
+          // Sections: read .section divs inside this page, sorted by order attr
+          const sectionEls = Array.from(p.querySelectorAll('.section')).sort(
+            (a, b) => parseFloat(a.getAttribute('order') || 0) - parseFloat(b.getAttribute('order') || 0)
+          );
+          return {
+            id: uid(),
+            name,
+            sections: sectionEls.map(s => ({
+              id: uid(),
+              title: s.textContent.trim(),
+              content: '',
+              open: true
+            }))
+          };
+        })
+      };
       treeData.push(ch); selectedChapterId = ch.id; selectedTopicId = null; saveAll(); renderTree(); renderPage();
-      saveLibrary().then(() => showToast(`✓ Index saved — "${chName}" with ${ch.topics.length} pages`)).catch(() => showToast(`✓ Index saved locally — "${chName}"`));
-      status.textContent = `✓ Created "${chName}" with ${ch.topics.length} topics.`; status.style.color = '#90dba0'; uploadChapterModal.classList.remove('open');
+      saveLibrary()
+        .then(() => showToast(`✓ Index saved — "${chName}" with ${ch.topics.length} pages`))
+        .catch(() => showToast(`✓ Index saved locally — "${chName}"`));
+      status.textContent = `✓ Created "${chName}" with ${ch.topics.length} topics.`;
+      status.style.color = '#90dba0';
+      uploadChapterModal.classList.remove('open');
     } catch(err) { status.textContent = '❌ Error: ' + err.message; status.style.color = '#ff7070'; }
   };
   reader.readAsText(file); this.value = '';
@@ -571,35 +575,31 @@ function openAIGenForSection(sec) {
   const ch = getChapter(selectedChapterId);
   if (!tp || !ch) return;
   aiTargetSection = sec;
- 
+
+  // Pull full page instructions from active preset
   const instructions = window.promptSettings
     ? window.promptSettings.getInstructions('page')
     : '';
- 
+
+  // Inject single-section context. The preset template already includes
+  // the full lesson-section HTML structure so we only supply live values.
   document.getElementById('pagePromptBox').textContent =
-    `${instructions ? instructions + '\n\n---\n\n' : ''}TASK: Write content for a single section.
- 
+    `${instructions}
+
+---
+
 Book: ${bookName}
 Chapter: ${ch.name}
-Section: ${sec.title}
- 
-OUTPUT ONLY this HTML, no preamble, no markdown fences:
- 
-<!DOCTYPE html>
-<html>
-<body>
-<div class="lesson-content">
-  <div class="lesson-section" data-title="${sec.title}">
-    <h3>${escHtml(sec.title)}</h3>
-    <p>Content...</p>
-  </div>
-</div>
-</body>
-</html>`;
- 
+Page (data-page): ${tp.name}
+Sections to cover (in exact order):
+1. ${sec.title}
+
+NOTE: Generate content for this single section only.`;
+
   document.getElementById('uploadPageStatus').textContent = '';
   uploadPageModal.classList.add('open');
 }
+
 document.getElementById('uploadPageFile').addEventListener('change', function() {
   const file = this.files[0]; if (!file) return;
   const status = document.getElementById('uploadPageStatus'); const reader = new FileReader();
@@ -610,15 +610,33 @@ document.getElementById('uploadPageFile').addEventListener('change', function() 
       const tp = getSelectedTopic(); if (!tp || !tp.sections) { status.textContent = '❌ No topic selected.'; status.style.color = '#ff7070'; return; }
       const sectionEls = doc.querySelectorAll('.lesson-section'); let filled = 0;
       if (aiTargetSection) {
-        const secEl = Array.from(sectionEls).find(el => (el.getAttribute('data-title')||'').trim().toLowerCase() === aiTargetSection.title.trim().toLowerCase()) || sectionEls[0];
-        if (secEl) { aiTargetSection.content = secEl.innerHTML; filled = 1; } aiTargetSection = null;
+        // Single-section AI gen: match by data-title, fall back to first element
+        const secEl = Array.from(sectionEls).find(
+          el => (el.getAttribute('data-title') || '').trim().toLowerCase() === aiTargetSection.title.trim().toLowerCase()
+        ) || sectionEls[0];
+        if (secEl) { aiTargetSection.content = secEl.innerHTML; filled = 1; }
+        aiTargetSection = null;
       } else {
-        sectionEls.forEach(secEl => { const dt = secEl.getAttribute('data-title'); const sec = tp.sections.find(s => s.title.trim().toLowerCase() === (dt||'').trim().toLowerCase()); if (sec) { sec.content = secEl.innerHTML; filled++; } });
-        if (filled === 0) sectionEls.forEach((secEl, i) => { if (tp.sections[i]) { tp.sections[i].content = secEl.innerHTML; filled++; } });
+        // Full-page upload: match each lesson-section to a topic section by data-title
+        sectionEls.forEach(secEl => {
+          const dt = secEl.getAttribute('data-title');
+          const sec = tp.sections.find(s => s.title.trim().toLowerCase() === (dt || '').trim().toLowerCase());
+          if (sec) { sec.content = secEl.innerHTML; filled++; }
+        });
+        // Fallback: positional matching if titles didn't align
+        if (filled === 0) {
+          sectionEls.forEach((secEl, i) => {
+            if (tp.sections[i]) { tp.sections[i].content = secEl.innerHTML; filled++; }
+          });
+        }
       }
       saveAll(); renderPage(); renderTree();
-      saveLibrary().then(() => showToast(`✓ Page content saved — ${filled} section(s) filled`)).catch(() => showToast(`✓ Page saved locally — ${filled} section(s)`));
-      status.textContent = `✓ Filled ${filled} section(s).`; status.style.color = '#90dba0'; uploadPageModal.classList.remove('open');
+      saveLibrary()
+        .then(() => showToast(`✓ Page content saved — ${filled} section(s) filled`))
+        .catch(() => showToast(`✓ Page saved locally — ${filled} section(s)`));
+      status.textContent = `✓ Filled ${filled} section(s).`;
+      status.style.color = '#90dba0';
+      uploadPageModal.classList.remove('open');
     } catch(err) { status.textContent = '❌ Error: ' + err.message; status.style.color = '#ff7070'; }
   };
   reader.readAsText(file); this.value = '';
@@ -626,8 +644,15 @@ document.getElementById('uploadPageFile').addEventListener('change', function() 
 
 window.copyPrompt = function(boxId, btnId) {
   const text = document.getElementById(boxId).textContent;
-  navigator.clipboard.writeText(text).then(() => { const btn = document.getElementById(btnId); const orig = btn.textContent; btn.textContent = '✓ Copied!'; btn.style.color = '#90dba0'; setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 2000); })
-  .catch(() => { const r = document.createRange(); r.selectNode(document.getElementById(boxId)); window.getSelection().removeAllRanges(); window.getSelection().addRange(r); document.execCommand('copy'); });
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById(btnId); const orig = btn.textContent;
+    btn.textContent = '✓ Copied!'; btn.style.color = '#90dba0';
+    setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 2000);
+  }).catch(() => {
+    const r = document.createRange(); r.selectNode(document.getElementById(boxId));
+    window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+    document.execCommand('copy');
+  });
 };
 
 // ── Plain editor toolbar ──────────────────────────────
