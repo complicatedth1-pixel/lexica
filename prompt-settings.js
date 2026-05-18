@@ -299,7 +299,8 @@ CRITICAL OUTPUT RULES:
 7. Every factual claim needs a clickable <a href="url" target="_blank">Source</a> inline.
 8. No inline styles except on the master revision-box. No <style> tags. No <script> tags.
 8.5. output must be in a html file.
-9. Output nothing outside the <div class="lesson-content"> — no extra HTML, no comments outside section markers.`;
+9. Output nothing outside the <div class="lesson-content"> — no extra HTML, no comments outside section markers.
+10. sometimes while explaining x you might need multiple other things, i want those other things to be explained too alongside mentioning them`;
 }
 
 // ── Getters (called fresh each time so date is always current) ─
