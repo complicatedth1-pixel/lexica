@@ -18,8 +18,7 @@ function getTodayString() {
 function getCurrentEconomicYear() {
   const d = new Date();
   const year = d.getFullYear();
-  const month = d.getMonth() + 1; // 1-indexed
-  // Economic year: Apr–Mar. Apr 2026–Mar 2027 = "2026-27"
+  const month = d.getMonth() + 1;
   if (month >= 4) {
     return `${year}-${String(year + 1).slice(2)}`;
   } else {
@@ -28,13 +27,6 @@ function getCurrentEconomicYear() {
 }
 
 function getCurrentBudgetYear() {
-  // Budget year = current economic year.
-  // Budget 2026-27 was presented Feb 2026 and runs Apr 2026–Mar 2027.
-  // So while we are in economic year 2026-27, budget year is also 2026-27.
-  // Budget is presented in Feb of the STARTING year of the economic year.
-  // e.g. Feb 2026 → Budget 2026-27 (April 2026 start)
-  // e.g. Feb 2027 → Budget 2027-28 (April 2027 start)
-  // So current running budget always = current economic year.
   return getCurrentEconomicYear();
 }
 
@@ -44,8 +36,6 @@ function buildDefaultIndexInstructions() {
   const econYear = getCurrentEconomicYear();
   const budgetYear = getCurrentBudgetYear();
   const presentedYear = (() => {
-    // Budget is presented in Feb of the year the economic year starts.
-    // e.g. Budget 2026-27 presented Feb 2026 → starting year = 2026
     const startYear = parseInt(econYear.split('-')[0]);
     return startYear;
   })();
@@ -71,9 +61,6 @@ LANGUAGE & TONE:
 - Points use kar, paragraphs nahi (jahan bhi fit ho).
 
 WHAT NOT TO DO:
-- Explicit examples mat bana story format mein.
-- Explicit scenarios mat set kar ("imagine you are...").
-- Unnecessary examples mat de sirf explain karne ke liye.
 - Leapfrog mat kar — concepts connected rehne chahiye.
 - Abstract mat reh — reality se jod bina "yeh ek example hai" bole.
 - Book ka text padhake mat ruk — woh outdated aur abstract hai.
@@ -149,10 +136,74 @@ function buildDefaultPageInstructions() {
 
   return `Tu mera UPSC learning partner hai. Tera kaam samjhana hai — ratta nahi. Treat me like someone smart jo sirf dots connect nahi kar pa raha. Blank slate nahi hoon.
 
+EXPLANATION SCHEMAS — CORE RULE:
+Har cheez jo tu explain karta hai — concept ho, insaan ho, institution ho, event ho — uski type pehchan aur usi style mein explain kar. Ek section ke andar ek paragraph mein teen alag cheezein ho sakti hain — teeno ko alag style milna chahiye. Fluid switching, no announcement.
+
+Agar koi cheez kisi bhi schema mein fit nahi hoti — ruk, soch: "is cheez ko samajhne ke liye kya format sabse zyada kaam karega?" Woh format use kar. Schema extend karna allowed hai, ignore karna nahi.
+
+SCHEMA 1 — CONCEPT / IDEA:
+- Kyu exist karta hai yeh? Kaunsi problem solve karta hai?
+- Ek strong sentence mein kya hai — aur kya NAHI hai.
+- Situational anchor: reader directly deal kar raha ho isse — woh situation naturally set ho. "Imagine you are" mat bol.
+- Example tabhi do jab concept bina uske hawa mein lage.
+
+SCHEMA 2 — PROCESS / MECHANISM:
+- Cause → effect → cause → effect. Chain dikhao.
+- Kya trigger karta hai, kya hota hai, kya break hota hai agar ek step fail ho.
+- Flow sequential ho — leapfrog allowed nahi.
+
+SCHEMA 3 — EVENT / HISTORY:
+- Before → trigger → kya hua → aftermath.
+- Kyu hua utna important hai jitna kya hua.
+- Chronological, grounded. Dates/figures sirf jab they change the story.
+
+SCHEMA 4 — SKILL / PROCEDURE:
+- Steps jo reader actually kar sake.
+- Ek worked example — right vs wrong dono.
+- Common mistake explicitly batao.
+
+SCHEMA 5 — PERSON / PERSONALITY:
+- Relevant person: kya obsession/drive tha → kya kiya → kya badla. Arc chahiye, bio nahi.
+- Peripheral person: ek line — kaun tha aur is story mein kya role tha. Move on.
+- Birth/education intro — never.
+
+SCHEMA 6 — INSTITUTION (relevant):
+- Day-to-day ground level: kya decisions leta hai, kya control karta hai, kaun feel karta hai effects, kaun isko diktat de sakta hai.
+- "It ensures financial stability" jaisi lines — banned. Concrete levers batao.
+- Who runs it, who it answers to, what it actually does when it "acts."
+
+SCHEMA 7 — INSTITUTION (peripheral):
+- Ek concrete sentence: kya karta hai aur is context mein kyun relevant hai. Then move on.
+
+SCHEMA 8 — COMMITTEE / GROUP / BODY:
+- Kyun bana, kaun hai andar, aur yeh log room mein baith ke actually kya decide ya influence karte hain.
+- Official mandate nahi — actual behavior.
+
+SCHEMA 9 — LAW / POLICY:
+- Kaunsi problem solve karne ke liye aaya.
+- Ground pe kya actually badla — konkret, not "it aimed to."
+- Kisne faayda uthaya, kaun hurt hua.
+
+SCHEMA 10 — NUMBER / DATA / METRIC:
+- Kya measure kar raha hai exactly.
+- High vs low value ka real-life matlab — normal insaan ya system pe kya impact.
+- Kya cause karta hai isko move karne pe.
+
+SCHEMA 11 — RELATIONSHIP / DEPENDENCY:
+- A se B ko kya hota hai. Loop hai ya one-way.
+- Kya tod sakta hai yeh connection.
+- Dono ko alag explain karne se alag — connection itself explain karo.
+
+SCHEMA 12 — ARGUMENT / DEBATE:
+- Har side actually kya believe karti hai aur kyu — not "some say X."
+- Asli disagreement kya hai underneath the surface.
+- Kaunsa evidence kaunsi side use karti hai.
+
+---
+
 TEACHING FLOW (free to remix):
 - Definition se kabhi mat shuru kar. Kabhi bhi.
 - Pehle set kar: yeh cheez kyu exist karti hai? Kaunsi real problem thi?
-- Phir concept seedha ek strong sentence mein — aur saath mein bhi bata kya NAHI hai yeh.
 - Beech mein rhetorical questions throw kar — aur khud hi turant answer kar. Ruk mat.
 - Callbacks use kar — jo scene ya problem shuru mein thi, wapas usse lo.
 - Kabhi kabhi mid-sentence ruk — jaise realization aa rahi ho.
@@ -168,12 +219,11 @@ LANGUAGE & TONE:
 - Points use kar, paragraphs nahi (jahan bhi fit ho).
 
 WHAT NOT TO DO:
-- Explicit examples mat bana story format mein.
-- Explicit scenarios mat set kar ("imagine you are...").
-- Unnecessary examples mat de sirf explain karne ke liye.
 - Leapfrog mat kar — concepts connected rehne chahiye.
-- Abstract mat reh — reality se jod bina "yeh ek example hai" bole.
+- Abstract mat reh — reality se jod.
 - Book ka text padhake mat ruk — woh outdated aur abstract hai.
+- Har cheez ek hi style mein mat explain kar — schema dekh, switch kar.
+- "For example" ya "imagine" explicitly bolne ki zaroorat nahi — example naturally flow mein aana chahiye.
 
 SOURCES & FACTS — NON-NEGOTIABLE:
 - Aaj ki date: ${today}. Current economic year: ${econYear}.
@@ -258,9 +308,9 @@ function getDefaultPageInstructions()  { return buildDefaultPageInstructions(); 
 
 // ── Module state ──────────────────────────────────────────────
 const _ps = {
-  indexPresets: [],   // [{id, name, instructions}]
+  indexPresets: [],
   pagePresets:  [],
-  activeIndexId: null, // null = Default
+  activeIndexId: null,
   activePageId:  null,
   loaded: false,
 };
@@ -327,14 +377,12 @@ window.promptSettings = {
   getInstructions(type) {
     const presets  = type === 'index' ? _ps.indexPresets : _ps.pagePresets;
     const activeId = type === 'index' ? _ps.activeIndexId : _ps.activePageId;
-    // Always call builder fresh → date is always today
     const defaultInstr = type === 'index' ? getDefaultIndexInstructions() : getDefaultPageInstructions();
     if (!activeId) return defaultInstr;
     const found = presets.find(p => p.id === activeId);
     return found ? found.instructions : defaultInstr;
   },
 
-  // Opens the preset manager modal for a given type
   openManager(type) {
     _renderPresetManager(type);
   },
@@ -437,7 +485,6 @@ function _renderPresetManager(type) {
     const isActive  = isDefault ? !currentActiveId() : selId === currentActiveId();
 
     if (isDefault) {
-      // Always regenerate default so date is current
       instructTA.value    = type === 'index' ? getDefaultIndexInstructions() : getDefaultPageInstructions();
       instructTA.readOnly = true;
       instructTA.style.opacity = '0.5';
@@ -460,16 +507,13 @@ function _renderPresetManager(type) {
     setActiveBtn.style.display = isActive ? 'none'  : 'flex';
   }
 
-  // Initial render
   refreshUI(activeId);
 
-  // ── Dropdown change ──────────────────────────────────────────
   dropdown.addEventListener('change', () => {
     const val = dropdown.value;
     refreshUI(val === '__default__' ? null : val);
   });
 
-  // ── Set as Active ────────────────────────────────────────────
   setActiveBtn.addEventListener('click', async () => {
     const val = dropdown.value === '__default__' ? null : dropdown.value;
     if (type === 'index') _ps.activeIndexId = val;
@@ -479,7 +523,6 @@ function _renderPresetManager(type) {
     setStatus('✓ Active preset updated', '#90dba0');
   });
 
-  // ── Save changes ─────────────────────────────────────────────
   saveBtn.addEventListener('click', async () => {
     const id = dropdown.value;
     if (id === '__default__') return;
@@ -495,7 +538,6 @@ function _renderPresetManager(type) {
     setStatus('✓ Saved', '#90dba0');
   });
 
-  // ── New preset ───────────────────────────────────────────────
   newBtn.addEventListener('click', async () => {
     newBtn.disabled    = true;
     newBtn.textContent = 'Creating…';
@@ -530,7 +572,6 @@ function _renderPresetManager(type) {
     setStatus('✓ New preset created and set as active', '#90dba0');
   });
 
-  // ── Delete ───────────────────────────────────────────────────
   deleteBtn.addEventListener('click', async () => {
     const id = dropdown.value;
     if (id === '__default__') return;
@@ -557,7 +598,6 @@ function _renderPresetManager(type) {
     setStatus('Preset deleted', '#887fa0');
   });
 
-  // ── Close ────────────────────────────────────────────────────
   closeBtn.addEventListener('click', () => modal.remove());
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 }
