@@ -243,13 +243,15 @@ function renderPage() {
   titleBar.style.display = 'block';
   titleBar.style.marginBottom = '0';
   topicLabel.textContent = tp.name; chapterLabel.textContent = ch ? '— ' + ch.name : '';
-  window._currentA4Page = 1; // reset on topic switch; will be updated after scroll
+
+  // ── Load this topic's accumulated time into the stopwatch display ──
+  // (stopwatch.js owns swElapsed/swRunning; we only set display when stopped)
   if (!swRunning) {
-    if (!tp.pageTimes) tp.pageTimes = {};
-    swElapsed = tp.pageTimes[1] || 0;
+    swElapsed = tp.timeSpent || 0;
     swSessionElapsed = 0;
     swDisplay.textContent = swElapsed > 0 ? swFormat(swElapsed) : '00:00';
   }
+
   if (ch && ch.topics) { const pn = ch.topics.findIndex(t => t.id === tp.id) + 1; pageProgress.textContent = `Page ${pn} of ${ch.topics.length}`; }
   const markBtn = document.getElementById('markReadBtn');
   if (markBtn) {
@@ -321,13 +323,13 @@ function renderPage() {
     }
   }
 
-  // Page number badge (top-right, shows current page number dynamically)
+  // Page number badge (top-right, purely cosmetic — shows visual A4 sheet count)
   const pgBadge = document.createElement('div');
   pgBadge.className = 'a4-page-number';
   pgBadge.textContent = '1';
   sheet.appendChild(pgBadge);
 
-  // Track current visible page via scroll
+  // Update the cosmetic badge when scrolling (no time tracking side-effects)
   function updateCurrentPageBadge() {
     const docArea = document.querySelector('.doc-area');
     if (!docArea) return;
@@ -335,12 +337,6 @@ function renderPage() {
     const contentScrolled = Math.max(0, -sheetTopInDocArea - A4_PAD_TOP + docArea.clientHeight / 2);
     const currentPage = Math.max(1, Math.floor(contentScrolled / A4_CONTENT) + 1);
     pgBadge.textContent = currentPage;
-    // Expose globally so stopwatch.js can track per-page time
-    const prev = window._currentA4Page;
-    window._currentA4Page = currentPage;
-    if (prev !== currentPage) {
-      document.dispatchEvent(new CustomEvent('a4pagechange', { detail: { from: prev, to: currentPage, topicId: selectedTopicId, chapterId: selectedChapterId } }));
-    }
   }
 
   const docAreaEl = document.querySelector('.doc-area');

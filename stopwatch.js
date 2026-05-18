@@ -1,10 +1,9 @@
-// stopwatch.js — Timer state, topic page time tracking, PDF page time
-// Per-page tracking: each A4 virtual page within a topic has its own time entry.
-// Data stored as tp.pageTimes = { [pageNum]: ms } on each topic object.
+// stopwatch.js — Timer state, topic time tracking, PDF page time
+// Per-TOPIC tracking: time is accumulated directly on tp.timeSpent (ms).
+// pageTimes is no longer used for regular topics; only PDFs still use pageTimes.
 // Owns: swElapsed, swStart, swTimer, swRunning, swSessionElapsed
 // Reads: treeData, selectedChapterId, selectedTopicId (from editor.js)
 // Reads: pdfMode, pdfViewerBook, pdfCurrentPage (from pdf.js)
-// Reads: window._currentA4Page (set by editor.js renderPage scroll handler)
 
 'use strict';
 
@@ -18,16 +17,9 @@ function swFormat(ms) {
   return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
 }
 
-// Get current A4 page (1-based); falls back to 1 if not in topic view
-function getCurrentA4Page() {
-  return (window._currentA4Page && window._currentA4Page >= 1) ? window._currentA4Page : 1;
-}
-
-// Return total time across ALL pages of a topic (for analytics compatibility)
+// Return total time for a topic — now simply tp.timeSpent
 function getTopicTotalTime(tp) {
   if (!tp) return 0;
-  if (tp.pageTimes && Object.keys(tp.pageTimes).length > 0)
-    return Object.values(tp.pageTimes).reduce((a, b) => a + b, 0);
   return tp.timeSpent || 0;
 }
 
@@ -41,7 +33,7 @@ swStartStop.addEventListener('click', () => {
     clearInterval(swTimer); swRunning = false; swStartStop.textContent = '▶';
     swDisplay.classList.remove('running'); swDisplay.textContent = swFormat(swElapsed);
     if (pdfMode && pdfCurrentPage !== null) savePDFPageTime();
-    else saveCurrentPageTime();
+    else saveCurrentTopicTime();
   }
 });
 
@@ -53,60 +45,34 @@ document.getElementById('swReset').addEventListener('click', () => {
     pdfViewerBook.pageTimes[pdfCurrentPage] = 0;
     saveBook(pdfViewerBook); showToast('Timer reset');
   } else {
-    const tp = getSelectedTopic(); const pg = getCurrentA4Page();
+    const tp = getSelectedTopic();
     if (tp) {
-      if (!tp.pageTimes) tp.pageTimes = {};
-      tp.pageTimes[pg] = 0;
-      tp.timeSpent = getTopicTotalTime(tp);
-      saveAll(); showToast('Timer reset for page ' + pg);
+      tp.timeSpent = 0;
+      tp.wordCount = computeTopicWordCount(tp);
+      saveAll(); showToast('Timer reset for topic');
     }
   }
 });
 
-// Save elapsed session time to the current topic + A4 page
-function saveCurrentPageTime() {
+// Save elapsed session time to the current topic directly
+function saveCurrentTopicTime() {
   const tp = getSelectedTopic(); if (!tp) return;
   let sessionTime = swSessionElapsed;
   if (swRunning && swStart) sessionTime += Date.now() - swStart;
   if (sessionTime <= 0) return;
-  if (!tp.pageTimes) tp.pageTimes = {};
-  const pg = getCurrentA4Page();
-  tp.pageTimes[pg] = (tp.pageTimes[pg] || 0) + sessionTime;
-  // Keep legacy tp.timeSpent as total for analytics compatibility
-  tp.timeSpent = getTopicTotalTime(tp);
+  tp.timeSpent = (tp.timeSpent || 0) + sessionTime;
   swSessionElapsed = 0;
   if (swRunning && swStart) swStart = Date.now();
   tp.wordCount = computeTopicWordCount(tp);
   saveAll();
 }
 
-// Alias used externally
+// Alias used externally (called by editor.js etc.)
 function saveStopwatchToTopic() {
-  if (!pdfMode) saveCurrentPageTime();
+  if (!pdfMode) saveCurrentTopicTime();
 }
 
-// ── A4 page change while running: bank time for old page, load new page ──
-document.addEventListener('a4pagechange', e => {
-  if (!swRunning || pdfMode) return;
-  const { from, to } = e.detail;
-  if (!from || from === to) return;
-
-  // Bank time for the page we're leaving
-  const added = Date.now() - swStart;
-  swSessionElapsed += added;
-  swStart = Date.now();
-
-  const tp = getSelectedTopic(); if (!tp) return;
-  if (!tp.pageTimes) tp.pageTimes = {};
-  tp.pageTimes[from] = (tp.pageTimes[from] || 0) + added;
-  tp.timeSpent = getTopicTotalTime(tp);
-  saveAll();
-
-  // Switch display to new page's accumulated time
-  swElapsed = tp.pageTimes[to] || 0;
-  swSessionElapsed = 0;
-  swStart = Date.now();
-});
+// ── No a4pagechange listener needed — time is per topic, not per visual page ──
 
 function savePDFPageTime() {
   if (!pdfMode || !pdfViewerBook || pdfCurrentPage === null) return;
@@ -136,23 +102,19 @@ document.getElementById('chapterList').addEventListener('click', e => {
     const tid = topicName.dataset.tid;
     if (tid && tid !== selectedTopicId) {
       if (swRunning && swStart) swSessionElapsed += Date.now() - swStart;
-      if (!pdfMode) saveCurrentPageTime();
+      if (!pdfMode) saveCurrentTopicTime();
       clearInterval(swTimer); swRunning = false; swStart = null; swSessionElapsed = 0;
       swStartStop.textContent = '▶'; swDisplay.classList.remove('running');
       swElapsed = 0; swDisplay.textContent = '00:00';
       setTimeout(() => {
-        const newTp = getSelectedTopic();
-        let found = newTp;
-        if (!found || found.id !== tid) {
-          for (const ch of (treeData || [])) {
-            const t = (ch.topics||[]).find(t => t.id === tid);
-            if (t) { found = t; break; }
-          }
+        // Find the newly selected topic and load its accumulated time
+        let found = null;
+        for (const ch of (treeData || [])) {
+          const t = (ch.topics||[]).find(t => t.id === tid);
+          if (t) { found = t; break; }
         }
         if (found) {
-          const pg = getCurrentA4Page();
-          if (!found.pageTimes) found.pageTimes = {};
-          swElapsed = found.pageTimes[pg] || 0;
+          swElapsed = found.timeSpent || 0;
           swDisplay.textContent = swElapsed > 0 ? swFormat(swElapsed) : '00:00';
         }
       }, 120);
@@ -169,7 +131,7 @@ document.getElementById('homeLink').addEventListener('click', () => {
       swSessionElapsed += elapsed;
       swStart = null;
     }
-    saveCurrentPageTime();
+    saveCurrentTopicTime();
     clearInterval(swTimer); swRunning = false; swElapsed = 0; swStart = null; swSessionElapsed = 0;
     swStartStop.textContent = '▶'; swDisplay.textContent = '00:00'; swDisplay.classList.remove('running');
   }
