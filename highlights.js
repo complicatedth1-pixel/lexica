@@ -696,7 +696,6 @@ function renderHighlightsPage() {
 
 // ── Navigate from highlights page to the live span ──
 function _navigateToHighlight(item, catKey) {
-  // Must have a book + topic to navigate
   if (!item.bookId || !item.topicId) {
     showToast('Cannot navigate — no topic info available');
     return;
@@ -705,20 +704,23 @@ function _navigateToHighlight(item, catKey) {
   const book = window.library.find(b => b.id === item.bookId);
   if (!book) { showToast('Book not found'); return; }
 
-  closeHighlightsPage();
+  // Hide highlights page without triggering homepage show
+  document.getElementById('highlightsPage').style.display = 'none';
 
-  // If this book isn't open, open it first
-  const needsBookSwitch = window.activeBookId !== item.bookId;
+  const editorShell = document.getElementById('editor-shell');
+  const homepage    = document.getElementById('homepage');
 
   function _afterBookOpen() {
-    // Navigate to the correct chapter + topic
+    // Set topic selection directly on window globals
     window.selectedChapterId = item.chapterId;
     window.selectedTopicId   = item.topicId;
-    // Also update editor.js locals via the globals
+    // Sync to editor.js local vars
+    selectedChapterId = item.chapterId;
+    selectedTopicId   = item.topicId;
+
     if (typeof renderTree === 'function') renderTree();
     if (typeof renderPage === 'function') renderPage();
 
-    // After page renders, find and scroll to the span
     setTimeout(() => {
       const selector = _allHlSpanSelectors();
       let found = null;
@@ -733,23 +735,26 @@ function _navigateToHighlight(item, catKey) {
       });
       if (found) {
         scrollToHL(found);
+        showToast('✦ Found highlight');
       } else {
-        showToast('Highlight found in topic — scroll to locate it');
+        showToast('Navigated to topic — highlight visible in page');
       }
-    }, 400);
+    }, 450);
   }
 
-  if (needsBookSwitch) {
-    // Open editor shell
-    const homepage = document.getElementById('homepage');
-    const editorShell = document.getElementById('editor-shell');
-    if (homepage)    homepage.classList.add('hidden');
-    if (editorShell) editorShell.classList.add('visible');
-    loadBookIntoEditor(book);
+  if (window.activeBookId !== item.bookId) {
+    homepage.classList.add('hidden');
+    editorShell.classList.add('visible');
+    if (typeof loadBookIntoEditor === 'function') loadBookIntoEditor(book);
     window.activeBookId = item.bookId;
+    book.lastOpened = Date.now();
+    if (typeof saveBook === 'function') saveBook(book);
     document.getElementById('sidebarBookTitle').textContent = book.name;
     _afterBookOpen();
   } else {
+    // Book already open — just make sure editor is visible
+    homepage.classList.add('hidden');
+    editorShell.classList.add('visible');
     _afterBookOpen();
   }
 }

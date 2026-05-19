@@ -577,19 +577,11 @@ function execOnActive(cmd, val) { const focused = document.activeElement; if (fo
 
 document.getElementById('btn-bold').addEventListener('mousedown', e => { e.preventDefault(); restoreSel(); exec('bold'); });
 document.getElementById('btn-italic').addEventListener('mousedown', e => { e.preventDefault(); restoreSel(); exec('italic'); });
-document.getElementById('btn-ul').addEventListener('mousedown', e => { e.preventDefault(); execOnActive('insertUnorderedList'); });
-document.getElementById('btn-ol').addEventListener('mousedown', e => { e.preventDefault(); execOnActive('insertOrderedList'); });
-document.getElementById('btn-h3').addEventListener('mousedown', e => { e.preventDefault(); execOnActive('formatBlock', 'h3'); });
-document.getElementById('btn-bq').addEventListener('mousedown', e => { e.preventDefault(); execOnActive('formatBlock', 'blockquote'); });
 document.getElementById('btn-link').addEventListener('mousedown', e => { e.preventDefault(); restoreSel(); const url = prompt('Enter URL:', 'https://'); if (url) exec('createLink', url); });
 document.getElementById('btn-undo').addEventListener('mousedown', e => { e.preventDefault(); document.execCommand('undo'); setTimeout(updateHL, 60); });
 document.getElementById('btn-redo').addEventListener('mousedown', e => { e.preventDefault(); document.execCommand('redo'); setTimeout(updateHL, 60); });
 
-['color-black','color-red','color-green','color-blue','color-gold'].forEach(id => {
-  const el = document.getElementById(id);
-  el.addEventListener('mousedown', e => { e.preventDefault(); applyColor(el.style.background); });
-  el.addEventListener('touchend', e => { e.preventDefault(); applyColor(el.style.background); });
-});
+
 
 editor.addEventListener('click', e => { const a = e.target.closest('a'); if (a && a.href) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); } });
 
