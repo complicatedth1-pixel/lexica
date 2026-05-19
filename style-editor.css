@@ -484,3 +484,8 @@
   border-radius: 3px;
   outline: none;
 }
+/* Hide user menu in editor mode */
+#editor-shell.visible ~ #userMenu,
+#editor-shell.visible + #userMenu {
+  display: none !important;
+}
