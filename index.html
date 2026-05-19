@@ -454,23 +454,29 @@ body:has(#editor-shell.visible) #userMenu {
 // Inject HL buttons and right panel — driven by HL_CATEGORIES (from highlight-categories.js)
 // These are also re-called by editor.js via window._injectHLButtons / _injectRightPanelCategories
 (function() {
-  function injectHLButtons() {
-    const container = document.getElementById('hl-toolbar-buttons');
-    if (!container || !window.HL_CATEGORIES) return;
-    container.innerHTML = '';
-    window.HL_CATEGORIES.forEach(cat => {
-      const btn = document.createElement('button');
-      btn.className = 'eo-hl';
-      btn.id = 'hl-btn-' + cat.key;
-      btn.title = cat.label;
-      btn.style.background = cat.color;
-      btn.style.color = '#000';
-      btn.style.fontSize = '9px';
-      btn.style.padding = '3px 7px';
-      btn.textContent = '✦ ' + cat.label;
-      container.appendChild(btn);
+// In the inline <script> block, replace the injectHLButtons function:
+
+function injectHLButtons() {
+  const container = document.getElementById('hl-toolbar-buttons');
+  if (!container || !window.HL_CATEGORIES) return;
+  container.innerHTML = '';
+  window.HL_CATEGORIES.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.className = 'eo-hl';
+    btn.id = 'hl-btn-' + cat.key;
+    btn.title = cat.label;
+    btn.style.background = cat.color;
+    btn.style.color = '#000';
+    btn.style.fontSize = '9px';
+    btn.style.padding = '3px 7px';
+    btn.textContent = '✦ ' + cat.label;
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      if (typeof setActiveHighlighter === 'function') setActiveHighlighter(cat.key);
     });
-  }
+    container.appendChild(btn);
+  });
+}
 
   function injectRightPanelCategories() {
     const panel = document.getElementById('hl-panel-categories');

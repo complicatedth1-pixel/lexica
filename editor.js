@@ -754,11 +754,18 @@ window._injectHLButtons = function() {
   container.innerHTML = '';
   window.HL_CATEGORIES.forEach(cat => {
     const btn = document.createElement('button');
-    btn.className = 'eo-hl'; btn.id = 'hl-btn-' + cat.key; btn.title = cat.label;
-    btn.style.background = cat.color; btn.style.color = '#000';
-    btn.style.fontSize = '9px'; btn.style.padding = '3px 7px';
+    btn.className = 'eo-hl';
+    btn.id = 'hl-btn-' + cat.key;
+    btn.title = cat.label;
+    btn.style.background = cat.color;
+    btn.style.color = '#000';
+    btn.style.fontSize = '9px';
+    btn.style.padding = '3px 7px';
     btn.textContent = '✦ ' + cat.label;
-    btn.addEventListener('click', e => { e.preventDefault(); setActiveHighlighter(cat.key); });
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      setActiveHighlighter(cat.key);
+    });
     container.appendChild(btn);
   });
 };
