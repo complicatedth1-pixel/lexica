@@ -6,6 +6,7 @@
 
 window.library = [];
 window.activeBookId = null;
+window._libraryLoaded = false; // GUARD: saveAll() blocks until this is true
 
 // ── Helpers ──────────────────────────────────────────
 function uid() { return '_' + Math.random().toString(36).slice(2, 9); }
@@ -74,12 +75,13 @@ async function loadLibraryFromSupabase() {
       highlights: r.highlights || {}, notes: r.notes || {},
       lastOpened: r.last_opened || 0, isPDF: r.is_pdf || false,
       isPDFViewer: r.is_pdf_viewer || false, pdfNumPages: r.pdf_num_pages || null,
-      pageTimes: r.page_times || {}, 
+      pageTimes: r.page_times || {},
       pdfHighlights: r.pdf_highlights || {},
       pageConfirmed: r.page_confirmed || {}
     }));
   }
   try { window.activeBookId = localStorage.getItem('folio-activeBook') || null; } catch(e){}
+  window._libraryLoaded = true; // GUARD: data is now safe to write back
   renderHomepage();
 }
 
@@ -105,12 +107,14 @@ async function loadPdfFromStorage(bookId) {
 
 // ── In-memory sync ────────────────────────────────────
 function saveAll() {
+  // GUARD: never write editor defaults back to DB before library is loaded from Supabase.
+  // Without this, the editor globals (treeData=[], bookName='My Book') get flushed to
+  // the active book on every page load, wiping real content before it's fetched.
+  if (!window._libraryLoaded) return;
+
   if (window.activeBookId) {
     const book = window.library.find(b => b.id === window.activeBookId);
     // FIX: Never overwrite a PDF viewer book's metadata from editor globals.
-    // PDF books don't use treeData/bookName/highlights/notes from the editor,
-    // so writing those globals back would corrupt the PDF book's name when
-    // activeBookId happens to point at one (e.g. after navigating home and back).
     if (book && !book.isPDFViewer) {
       book.treeData = treeData;   // treeData is owned by editor.js
       book.name = bookName;
@@ -193,10 +197,6 @@ const editorShell = document.getElementById('editor-shell');
 
 function openBookById(bookId) {
   const book = window.library.find(b => b.id === bookId); if (!book) return;
-  // FIX: Before switching away from the current book, save it — but only if the
-  // current active book is a regular (non-PDF) book. Calling saveAll() here when
-  // the outgoing book is a PDF would flush the stale editor globals (bookName etc.)
-  // onto the PDF book's record, corrupting its name.
   if (window.activeBookId && window.activeBookId !== bookId) {
     const outgoing = window.library.find(b => b.id === window.activeBookId);
     if (outgoing && !outgoing.isPDFViewer) saveAll();
@@ -222,9 +222,6 @@ function openEditor(bName) {
 }
 
 function goHome() {
-  // FIX: Only saveAll() when the active book is a regular (non-PDF) book.
-  // Calling saveAll() while a PDF is active would write the stale editor
-  // bookName/treeData globals back onto the PDF book's DB record.
   if (window.activeBookId) {
     const active = window.library.find(b => b.id === window.activeBookId);
     if (active && !active.isPDFViewer) saveAll();
@@ -320,15 +317,11 @@ async function processPDFFile(file) {
       try {
         const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         const numPages = pdf.numPages; status.textContent = `⏳ Detected ${numPages} pages…`;
-        // FIX: Store the original PDF filename separately as `pdfSourceName` so it
-        // is never overwritten by anything (book renames, editor globals, saveAll).
-        // The display `name` is also set from the file initially, but pdfSourceName
-        // is the stable source of truth that nothing else touches.
         const bkName = file.name.replace(/\.pdf$/i, '').trim() || 'Imported PDF';
         const newBook = {
           id: uid(),
           name: bkName,
-          pdfSourceName: bkName,   // immutable: original filename, never overwritten
+          pdfSourceName: bkName,
           treeData: [], highlights: {}, notes: {},
           lastOpened: Date.now(),
           isPDF: true, isPDFViewer: true,
