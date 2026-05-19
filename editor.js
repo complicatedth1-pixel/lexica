@@ -787,6 +787,24 @@ window._injectRightPanelCategories = function() {
     panel.appendChild(list);
   });
 };
-
+// ── Topbar drag-to-scroll ─────────────────────────────
+(function() {
+  const bar = document.querySelector('.topbar');
+  if (!bar) return;
+  let isDown = false, startX = 0, scrollLeft = 0;
+  bar.addEventListener('mousedown', e => {
+    if (e.target.closest('button,select,input,.eo-color,.ctrl-range')) return;
+    isDown = true;
+    startX = e.pageX - bar.offsetLeft;
+    scrollLeft = bar.scrollLeft;
+  });
+  document.addEventListener('mouseup', () => { isDown = false; });
+  bar.addEventListener('mouseleave', () => { isDown = false; });
+  bar.addEventListener('mousemove', e => {
+    if (!isDown) return;
+    e.preventDefault();
+    bar.scrollLeft = scrollLeft - (e.pageX - bar.offsetLeft - startX);
+  });
+})();
 // ── Init ──────────────────────────────────────────────
 renderTree(); renderPage(); updateHL();

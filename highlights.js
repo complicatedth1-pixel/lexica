@@ -506,46 +506,264 @@ function renderHighlightsPage() {
   const bookId = document.getElementById('hlPageBookSelect').value;
   const books = bookId === 'all' ? window.library : window.library.filter(b => b.id === bookId);
 
+  // ── Collect all items with full location metadata ──
   const combined = {};
   (window.HL_CATEGORIES || []).forEach(c => { combined[c.key] = []; });
   ['p','m','f','per','ins'].forEach(k => { if (!combined[k]) combined[k] = []; });
 
   books.forEach(book => {
-    const byCat = extractHighlightsFromBook(book);
-    Object.entries(byCat).forEach(([k, arr]) => {
-      if (!combined[k]) combined[k] = [];
-      combined[k] = combined[k].concat(arr);
+    (book.treeData || []).forEach(ch => {
+      (ch.topics || []).forEach(tp => {
+        (tp.sections || []).forEach(sec => {
+          if (!sec.content) return;
+          const tmp = document.createElement('div');
+          tmp.innerHTML = sec.content;
+          const selector = _allHlSpanSelectors();
+          tmp.querySelectorAll(selector).forEach(el => {
+            const text = el.textContent.trim();
+            if (!text) return;
+            let cat = el.dataset.hlCat || null;
+            if (!cat) {
+              const cls = Array.from(el.classList).find(c => c.startsWith('hl-span-'));
+              if (cls) cat = cls.replace('hl-span-', '');
+            }
+            if (!cat) return;
+            if (!combined[cat]) combined[cat] = [];
+            combined[cat].push({
+              text,
+              bookName: book.name,
+              bookId: book.id,
+              chapterId: ch.id,
+              chapterName: ch.name,
+              topicId: tp.id,
+              topicName: tp.name,
+              loc: tp.name
+            });
+          });
+        });
+      });
+    });
+
+    if (book.pdfHighlights) {
+      Object.entries(book.pdfHighlights).forEach(([pg, hls]) => {
+        if (!Array.isArray(hls)) return;
+        hls.forEach(hl => {
+          const cat = hl.type || 'p';
+          if (!combined[cat]) combined[cat] = [];
+          combined[cat].push({
+            text: hl.text || '',
+            bookName: book.name,
+            bookId: book.id,
+            chapterId: null,
+            chapterName: null,
+            topicId: null,
+            topicName: 'Page ' + pg,
+            loc: 'Page ' + pg
+          });
+        });
+      });
+    }
+  });
+
+  // ── Build chapter/topic lists for dropdowns ──
+  // Gather all chapters present in filtered books
+  const chapterSet = {}; // chapterId -> chapterName
+  const topicSet = {};   // topicId -> { name, chapterId }
+  books.forEach(book => {
+    (book.treeData || []).forEach(ch => {
+      chapterSet[ch.id] = ch.name;
+      (ch.topics || []).forEach(tp => {
+        topicSet[tp.id] = { name: tp.name, chapterId: ch.id };
+      });
     });
   });
 
   const container = document.getElementById('hlPageAllContent');
   if (!container) return;
-  container.innerHTML = '';
 
-  (window.HL_CATEGORIES || []).forEach(cat => {
-    const items = combined[cat.key] || [];
+  // ── Render filter bar ──
+  // Read current filter values (persist across re-renders)
+  const prevChapter = (document.getElementById('hlFilterChapter') || {}).value || 'all';
+  const prevTopic   = (document.getElementById('hlFilterTopic')   || {}).value || 'all';
+  const prevCat     = (document.getElementById('hlFilterCat')     || {}).value || 'all';
+
+  container.innerHTML = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:1.8rem;padding:12px 14px;background:rgba(255,255,255,0.03);border:1px solid var(--border-color);border-radius:6px;">
+      <span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--cream2);flex-shrink:0;">Filter</span>
+
+      <select id="hlFilterChapter" style="background:var(--glass2,rgba(255,255,255,0.06));border:1px solid var(--border-color);color:var(--cream);font-family:'Outfit',sans-serif;font-size:12px;padding:6px 10px;border-radius:4px;outline:none;cursor:pointer;min-height:36px;max-width:180px;">
+        <option value="all">All Chapters</option>
+        ${Object.entries(chapterSet).map(([id, name]) =>
+          `<option value="${escHtml(id)}" ${prevChapter === id ? 'selected' : ''}>${escHtml(name.length > 28 ? name.substring(0,26)+'…' : name)}</option>`
+        ).join('')}
+      </select>
+
+      <select id="hlFilterTopic" style="background:var(--glass2,rgba(255,255,255,0.06));border:1px solid var(--border-color);color:var(--cream);font-family:'Outfit',sans-serif;font-size:12px;padding:6px 10px;border-radius:4px;outline:none;cursor:pointer;min-height:36px;max-width:180px;">
+        <option value="all">All Topics</option>
+        ${Object.entries(topicSet).map(([id, tp]) =>
+          `<option value="${escHtml(id)}" data-chapter="${escHtml(tp.chapterId)}" ${prevTopic === id ? 'selected' : ''}>${escHtml(tp.name.length > 28 ? tp.name.substring(0,26)+'…' : tp.name)}</option>`
+        ).join('')}
+      </select>
+
+      <select id="hlFilterCat" style="background:var(--glass2,rgba(255,255,255,0.06));border:1px solid var(--border-color);color:var(--cream);font-family:'Outfit',sans-serif;font-size:12px;padding:6px 10px;border-radius:4px;outline:none;cursor:pointer;min-height:36px;max-width:180px;">
+        <option value="all">All Types</option>
+        ${(window.HL_CATEGORIES || []).map(cat =>
+          `<option value="${escHtml(cat.key)}" ${prevCat === cat.key ? 'selected' : ''} style="color:${cat.color};">✦ ${escHtml(cat.label)}</option>`
+        ).join('')}
+      </select>
+
+      <button onclick="renderHighlightsPage()" style="background:rgba(212,135,42,0.15);border:1px solid rgba(212,135,42,0.3);color:#d4a060;font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;padding:6px 14px;border-radius:4px;cursor:pointer;min-height:36px;">Apply</button>
+      <button onclick="_hlClearFilters()" style="background:transparent;border:1px solid rgba(255,255,255,0.1);color:var(--cream2);font-family:'Outfit',sans-serif;font-size:11px;padding:6px 12px;border-radius:4px;cursor:pointer;min-height:36px;">Clear</button>
+    </div>
+    <div id="hlPageCards"></div>
+  `;
+
+  // Wire chapter dropdown to cascade-filter topic dropdown
+  document.getElementById('hlFilterChapter').addEventListener('change', function() {
+    const selCh = this.value;
+    const topicSel = document.getElementById('hlFilterTopic');
+    Array.from(topicSel.options).forEach(opt => {
+      if (opt.value === 'all') { opt.style.display = ''; return; }
+      opt.style.display = (selCh === 'all' || opt.dataset.chapter === selCh) ? '' : 'none';
+    });
+    // Reset topic if current selection no longer visible
+    const cur = topicSel.value;
+    if (cur !== 'all') {
+      const curOpt = topicSel.querySelector(`option[value="${cur}"]`);
+      if (curOpt && curOpt.style.display === 'none') topicSel.value = 'all';
+    }
+  });
+
+  // Read filter values
+  const filterChapter = document.getElementById('hlFilterChapter').value;
+  const filterTopic   = document.getElementById('hlFilterTopic').value;
+  const filterCat     = document.getElementById('hlFilterCat').value;
+
+  const cardsEl = document.getElementById('hlPageCards');
+
+  // ── Render filtered cards grouped by category ──
+  const categoriesToShow = filterCat === 'all'
+    ? (window.HL_CATEGORIES || [])
+    : (window.HL_CATEGORIES || []).filter(c => c.key === filterCat);
+
+  let totalShown = 0;
+
+  categoriesToShow.forEach(cat => {
+    let items = combined[cat.key] || [];
+
+    // Apply filters
+    if (filterChapter !== 'all') items = items.filter(i => i.chapterId === filterChapter);
+    if (filterTopic   !== 'all') items = items.filter(i => i.topicId   === filterTopic);
+
+    if (!items.length) return;
+    totalShown += items.length;
+
     const section = document.createElement('div');
     section.style.marginBottom = '2.5rem';
-
     section.innerHTML = `<div style="font-family:'Cormorant Garamond',serif;font-size:clamp(20px,4vw,26px);font-weight:400;color:var(--cream);margin-bottom:1rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border-color);">${escHtml(cat.label)} <span style="font-size:16px;color:${cat.color};">(${items.length})</span></div>`;
 
-    if (!items.length) {
-      section.innerHTML += `<div style="color:var(--cream2);font-size:13px;font-style:italic;">No ${escHtml(cat.label)} highlights yet.</div>`;
-    } else {
-      const grid = document.createElement('div');
-      grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;';
-      items.forEach(item => {
-        const d = document.createElement('div');
-        d.style.cssText = `background:rgba(0,0,0,0.2);border:1px solid ${cat.color}44;border-radius:5px;padding:0.9rem 1rem;`;
-        const shortName = item.bookName.length > 20 ? item.bookName.substring(0,18)+'…' : item.bookName;
-        d.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;gap:0.5rem;"><span style="font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:${cat.color};flex-shrink:0;">${escHtml(cat.label.toUpperCase())}</span><span style="font-size:10px;color:var(--cream2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%;text-align:right;" title="${escHtml(item.bookName)}${item.loc ? ' · ' + escHtml(item.loc) : ''}">${escHtml(shortName)}${item.loc ? ' · ' + escHtml(item.loc) : ''}</span></div><div style="font-size:13px;color:var(--cream);line-height:1.65;font-family:'Lora',serif;word-break:break-word;">${escHtml(item.text.substring(0,280))}${item.text.length > 280 ? '…' : ''}</div>`;
-        grid.appendChild(d);
-      });
-      section.appendChild(grid);
-    }
-    container.appendChild(section);
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;';
+
+    items.forEach(item => {
+      const d = document.createElement('div');
+      d.style.cssText = `background:rgba(0,0,0,0.2);border:1px solid ${cat.color}44;border-radius:5px;padding:0.9rem 1rem;cursor:pointer;transition:opacity 0.15s,transform 0.15s;`;
+      const shortName = item.bookName.length > 18 ? item.bookName.substring(0,16)+'…' : item.bookName;
+      const locLabel = [item.chapterName, item.topicName].filter(Boolean).map(s => s.length > 18 ? s.substring(0,16)+'…' : s).join(' › ');
+      d.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;gap:0.5rem;">
+          <span style="font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:${cat.color};flex-shrink:0;">✦ ${escHtml(cat.label.toUpperCase())}</span>
+          <span style="font-size:10px;color:var(--cream2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%;text-align:right;" title="${escHtml(item.bookName)}${locLabel ? ' › ' + locLabel : ''}">${escHtml(shortName)}${locLabel ? ' › ' + escHtml(locLabel) : ''}</span>
+        </div>
+        <div style="font-size:13px;color:var(--cream);line-height:1.65;font-family:'Lora',serif;word-break:break-word;">${escHtml(item.text.substring(0,280))}${item.text.length > 280 ? '…' : ''}</div>
+        <div style="margin-top:8px;font-size:9px;color:var(--cream2);letter-spacing:1px;text-transform:uppercase;opacity:0.6;">Click to navigate →</div>
+      `;
+      d.addEventListener('mouseover', () => { d.style.opacity = '0.85'; d.style.transform = 'translateY(-1px)'; });
+      d.addEventListener('mouseout',  () => { d.style.opacity = '1';    d.style.transform = ''; });
+
+      d.addEventListener('click', () => _navigateToHighlight(item, cat.key));
+      grid.appendChild(d);
+    });
+
+    section.appendChild(grid);
+    cardsEl.appendChild(section);
   });
+
+  if (totalShown === 0) {
+    cardsEl.innerHTML = `<div style="text-align:center;padding:3rem;color:var(--cream2);font-style:italic;font-size:14px;">No highlights match the current filters.</div>`;
+  }
 }
+
+// ── Navigate from highlights page to the live span ──
+function _navigateToHighlight(item, catKey) {
+  // Must have a book + topic to navigate
+  if (!item.bookId || !item.topicId) {
+    showToast('Cannot navigate — no topic info available');
+    return;
+  }
+
+  const book = window.library.find(b => b.id === item.bookId);
+  if (!book) { showToast('Book not found'); return; }
+
+  closeHighlightsPage();
+
+  // If this book isn't open, open it first
+  const needsBookSwitch = window.activeBookId !== item.bookId;
+
+  function _afterBookOpen() {
+    // Navigate to the correct chapter + topic
+    window.selectedChapterId = item.chapterId;
+    window.selectedTopicId   = item.topicId;
+    // Also update editor.js locals via the globals
+    if (typeof renderTree === 'function') renderTree();
+    if (typeof renderPage === 'function') renderPage();
+
+    // After page renders, find and scroll to the span
+    setTimeout(() => {
+      const selector = _allHlSpanSelectors();
+      let found = null;
+      document.querySelectorAll('.section-editor, #editor').forEach(container => {
+        if (found) return;
+        container.querySelectorAll(selector).forEach(el => {
+          if (found) return;
+          const elCat = el.dataset.hlCat
+            || Array.from(el.classList).find(c => c.startsWith('hl-span-'))?.replace('hl-span-', '');
+          if (elCat === catKey && el.textContent.trim() === item.text.trim()) found = el;
+        });
+      });
+      if (found) {
+        scrollToHL(found);
+      } else {
+        showToast('Highlight found in topic — scroll to locate it');
+      }
+    }, 400);
+  }
+
+  if (needsBookSwitch) {
+    // Open editor shell
+    const homepage = document.getElementById('homepage');
+    const editorShell = document.getElementById('editor-shell');
+    if (homepage)    homepage.classList.add('hidden');
+    if (editorShell) editorShell.classList.add('visible');
+    loadBookIntoEditor(book);
+    window.activeBookId = item.bookId;
+    document.getElementById('sidebarBookTitle').textContent = book.name;
+    _afterBookOpen();
+  } else {
+    _afterBookOpen();
+  }
+}
+
+// ── Clear filters ──
+window._hlClearFilters = function() {
+  const ch  = document.getElementById('hlFilterChapter');
+  const tp  = document.getElementById('hlFilterTopic');
+  const cat = document.getElementById('hlFilterCat');
+  if (ch)  ch.value  = 'all';
+  if (tp)  tp.value  = 'all';
+  if (cat) cat.value = 'all';
+  renderHighlightsPage();
+};
 
 // ── Toolbar: setActiveHighlighter ────────────────────
 function setActiveHighlighter(type) {
