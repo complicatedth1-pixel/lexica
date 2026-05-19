@@ -1,634 +1,397 @@
-// highlights.js — New highlight system
-// 10 categories + Note + data-group hover glow + auto-assembled notes
-// Supports data-make-note="false" to suppress note creation for a group
-// Supports remove-highlight on click, add-to-group UI
-// Reads: treeData, selectedChapterId, selectedTopicId, pdfMode (globals)
-// Reads: _savedRange (set by editor.js on selection)
-// Depends on: highlight-categories.js (must load before this)
-
+// highlights.js
+// Highlight logic — categories driven by window.HL_CATEGORIES (from highlight-categories.js)
+// Exposes: window.activeHlType, window.setActiveHighlighter, window.updateHL, window.initGroupHighlightsFromHTML
+ 
 'use strict';
-
-// ── Active highlighter state ──────────────────────────
-// activeHlType holds a HL_CATEGORIES key (e.g. 'per', 'date') or null
-let activeHlType = null;
-
-// ── Group hover glow ──────────────────────────────────
-let _glowGroup = null;
-
-document.addEventListener('mouseover', e => {
-  const span = e.target.closest('[data-group]');
-  if (!span) return;
-  const grp = span.dataset.group;
-  if (!grp || grp === _glowGroup) return;
-  _clearGlow();
-  _glowGroup = grp;
-  document.querySelectorAll(`[data-group="${CSS.escape(grp)}"]`).forEach(el => el.classList.add('hl-group-glow'));
-});
-
-document.addEventListener('mouseout', e => {
-  const span = e.target.closest('[data-group]');
-  if (!span) return;
-  const related = e.relatedTarget;
-  if (related && related.closest && related.closest(`[data-group="${CSS.escape(span.dataset.group)}"]`)) return;
-  _clearGlow();
-});
-
-function _clearGlow() {
-  if (_glowGroup) {
-    document.querySelectorAll('.hl-group-glow').forEach(el => el.classList.remove('hl-group-glow'));
-    _glowGroup = null;
-  }
-}
-
-// ── Remove highlight on click (when no highlighter active) ──
-// Shows a small floating "Remove highlight" button near the clicked span
-let _removeBtn = null;
-
-function _ensureRemoveBtn() {
-  if (_removeBtn) return _removeBtn;
-  _removeBtn = document.createElement('button');
-  _removeBtn.id = 'hl-remove-btn';
-  _removeBtn.textContent = '✕ Remove highlight';
-  _removeBtn.style.cssText = [
-    'position:fixed',
-    'z-index:9100',
-    'background:#1a1624',
-    'border:1px solid rgba(255,80,80,0.45)',
-    'color:#ff9090',
-    'font-family:sans-serif',
-    'font-size:11px',
-    'padding:5px 12px',
-    'border-radius:8px',
-    'cursor:pointer',
-    'box-shadow:0 4px 16px rgba(0,0,0,0.5)',
-    'display:none',
-    'white-space:nowrap',
-  ].join(';');
-  document.body.appendChild(_removeBtn);
-
-  _removeBtn.addEventListener('click', e => {
-    e.stopPropagation();
-    const span = _removeBtn._targetSpan;
-    if (span && span.parentNode) {
-      // Unwrap span — replace with its text content
-      const parent = span.parentNode;
-      while (span.firstChild) parent.insertBefore(span.firstChild, span);
-      parent.removeChild(span);
-      // Save
-      _saveNearestEditor(parent);
-      setTimeout(updateHL, 80);
-    }
-    _removeBtn.style.display = 'none';
-    _removeBtn._targetSpan = null;
-  });
-
-  document.addEventListener('mousedown', e => {
-    if (e.target !== _removeBtn && !e.target.closest('#hl-remove-btn')) {
-      _removeBtn.style.display = 'none';
-      _removeBtn._targetSpan = null;
-    }
-  });
-
-  return _removeBtn;
-}
-
-function _saveNearestEditor(node) {
-  const editorEl = node.nodeType === 1 ? node.closest('.section-editor, #editor') : node.parentElement && node.parentElement.closest('.section-editor, #editor');
-  if (!editorEl) return;
-  if (editorEl.classList.contains('section-editor')) {
-    const sid = editorEl.dataset.sid;
-    const tp = getSelectedTopic();
-    if (tp && sid) {
-      const sec = tp.sections && tp.sections.find(s => s.id === sid);
-      if (sec) { sec.content = editorEl.innerHTML; if (typeof triggerAutosave === 'function') triggerAutosave(); }
-    }
-  }
-}
-
-// Wire remove button on click of any highlight span (when no highlighter active)
-document.addEventListener('click', e => {
-  if (activeHlType) return; // highlighter mode: don't show remove
-  const span = e.target.closest('.section-editor [class^="hl-span-"], #editor [class^="hl-span-"], .section-editor [class*=" hl-span-"], #editor [class*=" hl-span-"]');
-  if (!span) return;
-  e.stopPropagation();
-  const btn = _ensureRemoveBtn();
-  btn._targetSpan = span;
-  // Position near click
-  btn.style.left = Math.min(e.clientX, window.innerWidth - 180) + 'px';
-  btn.style.top  = (e.clientY - 38) + 'px';
-  btn.style.display = 'block';
-});
-
-// ── Apply highlight span ──────────────────────────────
-function applyPreciseHighlight(color, type, groupId) {
-  if (!restoreSel()) {
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed) { showToast('Select some text first'); return; }
-  }
-  const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { showToast('Select some text first'); return; }
-
-  const range = sel.getRangeAt(0).cloneRange();
-  const editorArea = range.commonAncestorContainer.nodeType === 1
-    ? range.commonAncestorContainer
-    : range.commonAncestorContainer.parentElement;
-  const inEditor = editorArea.closest('.section-editor, #editor');
-  if (!inEditor) { showToast('Click inside the editor first'); return; }
-
-  try {
-    const nodes = getSelectedTextNodes(range);
-    if (nodes.length === 0) { showToast('Select some text first'); return; }
-
-    const catDef = window.HL_CAT_MAP && window.HL_CAT_MAP[type];
-    const spanClass = catDef ? catDef.spanClass : ('hl-span-' + type);
-
-    nodes.forEach(({ node, start, end }) => {
-      if (start >= end) return;
-      if (end < node.textContent.length) node.splitText(end);
-      const mid = (start > 0) ? node.splitText(start) : node;
-      const span = document.createElement('span');
-      span.className = spanClass;
-      span.dataset.hlCat = type;
-      if (groupId) span.dataset.group = groupId;
-      mid.parentNode.insertBefore(span, mid);
-      span.appendChild(mid);
-    });
-
-    sel.removeAllRanges();
-    _savedRange = null;
-
-    if (inEditor.classList.contains('section-editor')) {
-      const sid = inEditor.dataset.sid;
-      const tp = getSelectedTopic();
-      if (tp && sid) {
-        const sec = tp.sections.find(s => s.id === sid);
-        if (sec) { sec.content = inEditor.innerHTML; if (typeof triggerAutosave === 'function') triggerAutosave(); }
-      }
-    }
-
-    setTimeout(updateHL, 80);
-    const label = catDef ? catDef.label : type;
-    showToast(`✦ Highlighted as ${label}`);
-  } catch(err) {
-    console.warn('Highlight error:', err);
-    showToast('Could not highlight selection');
-  }
-}
-
-// ── Add to existing group UI ──────────────────────────
-// When a highlighter is active and user selects text, we normally apply a new highlight.
-// If user SHIFT+clicks a highlight span, we open a prompt to set a group name on it.
-document.addEventListener('click', e => {
-  if (!e.shiftKey) return;
-  const span = e.target.closest('[data-hl-cat]');
-  if (!span) return;
-  e.stopPropagation();
-  e.preventDefault();
-  const currentGroup = span.dataset.group || '';
-  const newGroup = prompt(`Set group name for this highlight (leave blank to remove group):\nCurrent: "${currentGroup}"`, currentGroup);
-  if (newGroup === null) return; // cancelled
-  const clean = newGroup.trim().toLowerCase().replace(/\s+/g, '-');
-  if (clean) {
-    span.dataset.group = clean;
-  } else {
-    delete span.dataset.group;
-  }
-  _saveNearestEditor(span);
-  setTimeout(updateHL, 80);
-  showToast(clean ? `Group set: "${clean}"` : 'Group removed');
-});
-
-// ── Text node walker ──────────────────────────────────
-function getSelectedTextNodes(range) {
-  const result = [];
-  const startNode = range.startContainer;
-  const endNode   = range.endContainer;
-  const startOff  = range.startOffset;
-  const endOff    = range.endOffset;
-
-  if (startNode === endNode && startNode.nodeType === Node.TEXT_NODE) {
-    if (startOff < endOff) result.push({ node: startNode, start: startOff, end: endOff });
-    return result;
-  }
-
-  function resolveStart(container, offset) {
-    if (container.nodeType === Node.TEXT_NODE) return { node: container, off: offset };
-    const child = container.childNodes[offset] || container.childNodes[offset - 1];
-    if (!child) return null;
-    if (container.childNodes[offset]) {
-      const w = document.createTreeWalker(container.childNodes[offset], NodeFilter.SHOW_TEXT);
-      const n = w.nextNode();
-      return n ? { node: n, off: 0 } : null;
-    }
-    const w = document.createTreeWalker(child, NodeFilter.SHOW_TEXT);
-    let last = null, n;
-    while ((n = w.nextNode())) last = n;
-    return last ? { node: last, off: last.textContent.length } : null;
-  }
-
-  function resolveEnd(container, offset) {
-    if (container.nodeType === Node.TEXT_NODE) return { node: container, off: offset };
-    if (offset === 0) return null;
-    const child = container.childNodes[offset - 1];
-    if (!child) return null;
-    const w = document.createTreeWalker(child, NodeFilter.SHOW_TEXT);
-    let last = null, n;
-    while ((n = w.nextNode())) last = n;
-    return last ? { node: last, off: last.textContent.length } : null;
-  }
-
-  const resolved_start = resolveStart(startNode, startOff);
-  const resolved_end   = resolveEnd(endNode, endOff);
-  if (!resolved_start || !resolved_end) return result;
-
-  const actualStart    = resolved_start.node;
-  const actualStartOff = resolved_start.off;
-  const actualEnd      = resolved_end.node;
-  const actualEndOff   = resolved_end.off;
-
-  if (actualStart === actualEnd) {
-    if (actualStartOff < actualEndOff)
-      result.push({ node: actualStart, start: actualStartOff, end: actualEndOff });
-    return result;
-  }
-
-  const root   = range.commonAncestorContainer;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-  let inside   = false;
-
-  while (walker.nextNode()) {
-    const node = walker.currentNode;
-    if (!inside) {
-      if (node === actualStart) {
-        inside = true;
-        const end = (node === actualEnd) ? actualEndOff : node.textContent.length;
-        if (actualStartOff < end) result.push({ node, start: actualStartOff, end });
-        if (node === actualEnd) break;
-      }
-    } else {
-      if (node === actualEnd) {
-        if (actualEndOff > 0) result.push({ node, start: 0, end: actualEndOff });
-        break;
-      }
-      result.push({ node, start: 0, end: node.textContent.length });
-    }
-  }
-
-  return result;
-}
-
-// ── Selector for all hl spans ─────────────────────────
-function _allHlSpanSelectors() {
-  const newClasses = (window.HL_CATEGORIES || []).map(c => 'span.' + c.spanClass).join(', ');
-  const legacy = 'span.hl-span-p, span.hl-span-m, span.hl-span-f, span.hl-span-per, span.hl-span-ins';
-  return newClasses ? newClasses + ', ' + legacy : legacy;
-}
-
-function getHL() {
-  const result = {};
-  (window.HL_CATEGORIES || []).forEach(c => { result[c.key] = []; });
-  ['p','m','f','per','ins'].forEach(k => { if (!result[k]) result[k] = []; });
-
-  const selector = _allHlSpanSelectors();
-  document.querySelectorAll('.section-editor, #editor').forEach(container => {
-    container.querySelectorAll(selector).forEach(el => {
-      const text = el.textContent.trim();
-      if (!text) return;
-      let cat = el.dataset.hlCat || null;
-      if (!cat) {
-        const cls = Array.from(el.classList).find(c => c.startsWith('hl-span-'));
-        if (cls) cat = cls.replace('hl-span-', '');
-      }
-      if (!cat) return;
-      if (!result[cat]) result[cat] = [];
-      result[cat].push({ text, el });
-    });
-  });
-  return result;
-}
-
-function scrollToHL(el) {
-  el.scrollIntoView({ behavior:'smooth', block:'center' });
-  el.classList.remove('hl-pulse'); void el.offsetWidth; el.classList.add('hl-pulse');
-  el.addEventListener('animationend', () => el.classList.remove('hl-pulse'), { once: true });
-}
-
-// ── Sidebar right panel — render HL cards ─────────────
-function updateHL() {
-  if (typeof pdfMode !== 'undefined' && pdfMode) {
-    if (typeof updatePDFHighlightSidebar === 'function') updatePDFHighlightSidebar();
+ 
+// ── Active highlighter state (window-scoped so editor.js can read it) ────────
+window.activeHlType = null;
+ 
+// ── Set active highlighter ────────────────────────────────────────────────────
+window.setActiveHighlighter = function(catKey) {
+  // Toggle off if same button clicked again
+  if (window.activeHlType === catKey) {
+    window.activeHlType = null;
+    _updateAllButtonStates();
     return;
   }
-  const hlData = getHL();
-
+  window.activeHlType = catKey;
+  _updateAllButtonStates();
+};
+ 
+function _updateAllButtonStates() {
   (window.HL_CATEGORIES || []).forEach(cat => {
-    const el = document.getElementById('hl-list-' + cat.key);
-    if (!el) return;
-    const items = hlData[cat.key] || [];
-    if (!items.length) {
-      el.innerHTML = `<div class="hl-empty">No ${cat.label} highlights yet</div>`;
+    const btn = document.getElementById('hl-btn-' + cat.key);
+    if (!btn) return;
+    if (window.activeHlType === cat.key) {
+      btn.classList.add('hl-active');
+      btn.style.outline = '2px solid #fff';
+      btn.style.outlineOffset = '2px';
+    } else {
+      btn.classList.remove('hl-active');
+      btn.style.outline = '';
+      btn.style.outlineOffset = '';
+    }
+  });
+  document.body.style.cursor = window.activeHlType ? 'crosshair' : '';
+}
+ 
+// ── Apply highlight on mouseup ────────────────────────────────────────────────
+document.addEventListener('mouseup', function(e) {
+  if (!window.activeHlType) return;
+  // Don't trigger inside the toolbar itself
+  if (e.target.closest('.topbar') || e.target.closest('#custom-sel-menu')) return;
+ 
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
+ 
+  const range = sel.getRangeAt(0);
+  // Ensure selection is inside an editor
+  const editorEl = range.commonAncestorContainer.nodeType === 1
+    ? range.commonAncestorContainer.closest('.section-editor, #editor')
+    : range.commonAncestorContainer.parentElement && range.commonAncestorContainer.parentElement.closest('.section-editor, #editor');
+  if (!editorEl) return;
+ 
+  applyPreciseHighlight(range, window.activeHlType);
+  sel.removeAllRanges();
+ 
+  // Deactivate after one use
+  window.activeHlType = null;
+  _updateAllButtonStates();
+ 
+  // Save
+  _syncEditorContent(editorEl);
+  if (typeof triggerAutosave === 'function') triggerAutosave();
+  setTimeout(updateHL, 80);
+  setTimeout(initGroupHighlightsFromHTML, 100);
+});
+ 
+// ── Apply precise highlight span ──────────────────────────────────────────────
+function applyPreciseHighlight(range, catKey) {
+  const cat = (window.HL_CAT_MAP || {})[catKey];
+  if (!cat) return;
+ 
+  const span = document.createElement('span');
+  span.className = cat.spanClass;
+  span.setAttribute('data-hl-cat', catKey);
+ 
+  try {
+    range.surroundContents(span);
+  } catch(e) {
+    // Range spans multiple elements — extract and wrap
+    try {
+      const frag = range.extractContents();
+      span.appendChild(frag);
+      range.insertNode(span);
+    } catch(e2) {
+      console.warn('highlights.js: could not apply highlight', e2);
       return;
     }
-    el.innerHTML = '';
-    items.forEach(({ text, el: spanEl }) => {
-      const card = document.createElement('div');
-      card.className = 'hl-card hl-card-new hl-card-clickable';
-      card.style.cssText = `background:rgba(0,0,0,0.15);border:1px solid ${cat.color}33;border-radius:5px;margin-bottom:6px;padding:7px 10px;cursor:pointer;`;
-      card.innerHTML = `<span class="hl-card-badge" style="background:${cat.color};color:#000;font-size:9px;font-family:sans-serif;font-weight:700;letter-spacing:.08em;border-radius:10px;padding:1px 7px;margin-bottom:4px;display:inline-block;">✦ ${escHtml(cat.label.toUpperCase())}</span><div style="font-size:11px;font-family:var(--font);line-height:1.5;color:#c0b8d0;display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${escHtml(text)}</div>`;
-      card.addEventListener('click', () => scrollToHL(spanEl));
-      el.appendChild(card);
-    });
-  });
-
-  // Legacy
-  const legacyMap = { p:'hl-list-p', m:'hl-list-m', f:'hl-list-f', per:'hl-list-per', ins:'hl-list-ins' };
-  Object.entries(legacyMap).forEach(([k, id]) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    const items = hlData[k] || [];
-    if (!items.length) { el.innerHTML = `<div class="hl-empty">No highlights yet</div>`; return; }
-    el.innerHTML = '';
-    items.forEach(({ text, el: spanEl }) => {
-      const card = document.createElement('div');
-      card.className = `hl-card hl-card-${k} hl-card-clickable`;
-      card.innerHTML = `<span class="hl-card-badge badge-${k}">✦ ${k.toUpperCase()}</span><div class="hl-card-text">${escHtml(text)}</div>`;
-      card.addEventListener('click', () => scrollToHL(spanEl));
-      el.appendChild(card);
-    });
-  });
-
-  _updateNotesPanel();
+  }
 }
-
-// ── Notes assembly ────────────────────────────────────
-// Supports data-make-note="false" to suppress note for a group
-function _assembleNotes() {
-  const notes = [];
-
-  // Rule 2: standalone Note category spans
-  document.querySelectorAll('.section-editor, #editor').forEach(container => {
-    container.querySelectorAll('span.hl-span-note').forEach(el => {
-      const text = el.textContent.trim();
-      if (text) notes.push({ text, type: 'note', el });
+ 
+// ── Sync editor content back to section data ──────────────────────────────────
+function _syncEditorContent(editorEl) {
+  // For section editors, fire an input event so editor.js picks it up
+  if (editorEl && editorEl.classList.contains('section-editor')) {
+    editorEl.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}
+ 
+// ── Remove highlight button ───────────────────────────────────────────────────
+(function() {
+  const removeBtn = document.createElement('button');
+  removeBtn.id = 'hl-remove-btn';
+  removeBtn.textContent = '✕ Remove Highlight';
+  removeBtn.style.cssText = 'display:none;position:fixed;z-index:9000;background:#2a1f2e;border:1px solid rgba(255,100,100,0.4);color:#ff9090;font-size:11px;font-family:sans-serif;padding:5px 11px;border-radius:6px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.5);';
+  document.body.appendChild(removeBtn);
+ 
+  let _hlTarget = null;
+ 
+  document.addEventListener('contextmenu', function(e) {
+    const span = e.target.closest('[data-hl-cat]');
+    if (!span) { removeBtn.style.display = 'none'; return; }
+    e.preventDefault();
+    _hlTarget = span;
+    removeBtn.style.left = e.clientX + 'px';
+    removeBtn.style.top  = (e.clientY - 36) + 'px';
+    removeBtn.style.display = 'block';
+  });
+ 
+  removeBtn.addEventListener('click', function() {
+    if (!_hlTarget) return;
+    const parent = _hlTarget.parentNode;
+    while (_hlTarget.firstChild) parent.insertBefore(_hlTarget.firstChild, _hlTarget);
+    parent.removeChild(_hlTarget);
+    _hlTarget = null;
+    removeBtn.style.display = 'none';
+    if (typeof triggerAutosave === 'function') triggerAutosave();
+    setTimeout(updateHL, 80);
+    setTimeout(initGroupHighlightsFromHTML, 100);
+  });
+ 
+  document.addEventListener('mousedown', function(e) {
+    if (e.target !== removeBtn) removeBtn.style.display = 'none';
+  });
+})();
+ 
+// ── Update right-panel highlight lists ───────────────────────────────────────
+window.updateHL = function updateHL() {
+  if (!window.HL_CATEGORIES) return;
+ 
+  window.HL_CATEGORIES.forEach(cat => {
+    const listEl = document.getElementById('hl-list-' + cat.key);
+    if (!listEl) return;
+ 
+    const spans = Array.from(document.querySelectorAll(
+      `.section-editor [data-hl-cat="${cat.key}"], #editor [data-hl-cat="${cat.key}"]`
+    ));
+ 
+    if (spans.length === 0) {
+      listEl.innerHTML = `<div class="hl-empty">No ${escHtml(cat.label)} highlights yet</div>`;
+      return;
+    }
+ 
+    listEl.innerHTML = '';
+    spans.forEach(span => {
+      const card = document.createElement('div');
+      card.className = 'hl-card hl-card-clickable';
+      card.style.borderLeft = `3px solid ${cat.color}`;
+      card.style.background = `rgba(${_hexToRgbParts(cat.color)},0.08)`;
+ 
+      const badge = document.createElement('div');
+      badge.className = 'hl-card-badge';
+      badge.style.background = cat.color;
+      badge.style.color = '#000';
+      badge.textContent = cat.label;
+ 
+      const text = document.createElement('div');
+      text.className = 'hl-card-text';
+      text.textContent = span.textContent;
+ 
+      card.appendChild(badge);
+      card.appendChild(text);
+      card.addEventListener('click', () => {
+        span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        span.classList.add('hl-pulse');
+        setTimeout(() => span.classList.remove('hl-pulse'), 1000);
+      });
+      listEl.appendChild(card);
     });
   });
-
-  // Rule 1: groups with 2+ spans — respects data-make-note="false"
-  const groupMap = {};
-  document.querySelectorAll('.section-editor, #editor').forEach(container => {
-    container.querySelectorAll('[data-group]').forEach(el => {
-      const grp = el.dataset.group;
-      if (!grp) return;
-      if (!groupMap[grp]) groupMap[grp] = [];
-      groupMap[grp].push(el);
-    });
+ 
+  // Update notes panel
+  _renderNotes();
+};
+ 
+// ── Group hover glow ──────────────────────────────────────────────────────────
+document.addEventListener('mouseover', function(e) {
+  const span = e.target.closest('[data-group]');
+  if (!span) return;
+  const group = span.getAttribute('data-group');
+  if (!group) return;
+  document.querySelectorAll(`[data-group="${CSS.escape(group)}"]`).forEach(el => el.classList.add('hl-group-glow'));
+});
+ 
+document.addEventListener('mouseout', function(e) {
+  const span = e.target.closest('[data-group]');
+  if (!span) return;
+  const group = span.getAttribute('data-group');
+  if (!group) return;
+  document.querySelectorAll(`[data-group="${CSS.escape(group)}"]`).forEach(el => el.classList.remove('hl-group-glow'));
+});
+ 
+// Shift+click to select all spans in the same group
+document.addEventListener('click', function(e) {
+  if (!e.shiftKey) return;
+  const span = e.target.closest('[data-group]');
+  if (!span) return;
+  const group = span.getAttribute('data-group');
+  if (!group) return;
+  const all = document.querySelectorAll(`[data-group="${CSS.escape(group)}"]`);
+  all.forEach(el => {
+    el.classList.add('hl-pulse');
+    setTimeout(() => el.classList.remove('hl-pulse'), 1000);
   });
-
-  Object.entries(groupMap).forEach(([grp, spans]) => {
-    if (spans.length < 2) return;
-
-    // Check if ANY span in this group has data-make-note="false"
-    const suppressNote = spans.some(s => s.dataset.makeNote === 'false');
-    if (suppressNote) return;
-
-    const sorted = Array.from(spans).sort((a, b) => {
-      const pos = a.compareDocumentPosition(b);
-      return (pos & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1;
-    });
-
-    const firstSpan = sorted[0];
-    const lastSpan  = sorted[sorted.length - 1];
-    const container = firstSpan.closest('.section-editor, #editor');
-    if (!container) return;
-
-    try {
-      const range = document.createRange();
-      range.setStart(firstSpan, 0);
-      range.setEnd(lastSpan, lastSpan.childNodes.length || lastSpan.textContent.length);
-      const text = range.toString().trim();
-      if (text) notes.push({ text, type: 'group', group: grp, el: firstSpan });
-    } catch(e) {
-      const text = sorted.map(s => s.textContent).join(' … ');
-      if (text) notes.push({ text, type: 'group', group: grp, el: firstSpan });
+  e.preventDefault();
+});
+ 
+// ── Auto-assemble groups into Notes panel ────────────────────────────────────
+window.initGroupHighlightsFromHTML = function() {
+  // Re-stamp span classes from data-hl-cat (in case HTML was loaded without live CSS)
+  document.querySelectorAll('[data-hl-cat]').forEach(span => {
+    const catKey = span.getAttribute('data-hl-cat');
+    const cat = (window.HL_CAT_MAP || {})[catKey];
+    if (cat && !span.classList.contains(cat.spanClass)) {
+      // Remove old hl classes
+      Array.from(span.classList).forEach(c => { if (c.startsWith('hl-span-')) span.classList.remove(c); });
+      span.classList.add(cat.spanClass);
     }
   });
-
-  return notes;
-}
-
-function _updateNotesPanel() {
-  const panel = document.getElementById('notes-list');
-  if (!panel) return;
-  const notes = _assembleNotes();
-  if (!notes.length) {
-    panel.innerHTML = '<div class="hl-empty">No notes yet — groups with 2+ highlights auto-appear here</div>';
+ 
+  updateHL();
+  _renderNotes();
+};
+ 
+// ── Render notes from groups ──────────────────────────────────────────────────
+function _renderNotes() {
+  const notesList = document.getElementById('notes-list');
+  if (!notesList) return;
+ 
+  // Collect all spans with data-group (where data-make-note is not "false")
+  const groupMap = {};
+  document.querySelectorAll('[data-group]').forEach(span => {
+    if (span.getAttribute('data-make-note') === 'false') return;
+    const group = span.getAttribute('data-group');
+    if (!group) return;
+    if (!groupMap[group]) groupMap[group] = [];
+    groupMap[group].push(span);
+  });
+ 
+  // Only groups with 2+ highlights become notes
+  const noteGroups = Object.entries(groupMap).filter(([, spans]) => spans.length >= 2);
+ 
+  // Collect standalone hl-span-note spans (no data-group)
+  const standaloneNotes = Array.from(document.querySelectorAll('[data-hl-cat="note"]:not([data-group])'));
+ 
+  if (noteGroups.length === 0 && standaloneNotes.length === 0) {
+    notesList.innerHTML = '<div class="hl-empty">No notes yet — groups with 2+ highlights auto-appear here</div>';
     return;
   }
-  panel.innerHTML = '';
-  notes.forEach(({ text, type, group, el }) => {
+ 
+  notesList.innerHTML = '';
+ 
+  noteGroups.forEach(([groupName, spans]) => {
+    const card = document.createElement('div');
+    card.className = 'note-card';
+ 
+    const title = document.createElement('div');
+    title.className = 'note-tag';
+    title.textContent = '✦ ' + groupName.replace(/-/g, ' ');
+    card.appendChild(title);
+ 
+    spans.forEach(span => {
+      const catKey = span.getAttribute('data-hl-cat');
+      const cat = (window.HL_CAT_MAP || {})[catKey];
+      const line = document.createElement('p');
+      if (cat) {
+        line.innerHTML = `<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:700;background:${cat.color};color:#000;margin-right:4px;">${escHtml(cat.label)}</span> ${escHtml(span.textContent)}`;
+      } else {
+        line.textContent = span.textContent;
+      }
+      card.appendChild(line);
+    });
+ 
+    // Click to scroll to first span
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', () => {
+      spans[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      spans[0].classList.add('hl-pulse');
+      setTimeout(() => spans[0].classList.remove('hl-pulse'), 1000);
+    });
+ 
+    notesList.appendChild(card);
+  });
+ 
+  standaloneNotes.forEach(span => {
     const card = document.createElement('div');
     card.className = 'note-card';
     card.style.cursor = 'pointer';
-    const badge = type === 'note' ? '📝 Note' : `✦ ${group || 'Group'}`;
-    card.innerHTML = `<p>${escHtml(text.substring(0, 300))}${text.length > 300 ? '…' : ''}</p><div class="note-tag">${badge}</div>`;
-    if (el) card.addEventListener('click', () => scrollToHL(el));
-    panel.appendChild(card);
-  });
-}
-
-// Observe DOM changes and re-run updateHL
-new MutationObserver(updateHL).observe(document.getElementById('pageCard'), {
-  childList: true, subtree: true, attributes: true, attributeFilter: ['style','class','data-group','data-make-note']
-});
-
-// ── initGroupHighlightsFromHTML ───────────────────────
-function initGroupHighlightsFromHTML() {
-  document.querySelectorAll('.section-editor, #editor').forEach(container => {
-    container.querySelectorAll('[data-hl-cat]').forEach(el => {
-      const cat = el.dataset.hlCat;
-      const catDef = window.HL_CAT_MAP && window.HL_CAT_MAP[cat];
-      if (!catDef) return;
-      if (!el.classList.contains(catDef.spanClass)) {
-        el.classList.add(catDef.spanClass);
-      }
+    const p = document.createElement('p');
+    p.textContent = span.textContent;
+    card.appendChild(p);
+    card.addEventListener('click', () => {
+      span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      span.classList.add('hl-pulse');
+      setTimeout(() => span.classList.remove('hl-pulse'), 1000);
     });
+    notesList.appendChild(card);
   });
-  setTimeout(updateHL, 80);
 }
-window.initGroupHighlightsFromHTML = initGroupHighlightsFromHTML;
-
-// ── Highlights Page ───────────────────────────────────
-function openHighlightsPage() {
-  const sel = document.getElementById('hlPageBookSelect');
-  sel.innerHTML = '<option value="all">All Books</option>';
-  window.library.forEach(b => {
-    const o = document.createElement('option');
-    o.value = b.id;
-    o.textContent = b.name.length > 30 ? b.name.substring(0,28) + '…' : b.name;
-    o.title = b.name;
-    sel.appendChild(o);
-  });
-  document.getElementById('highlightsPage').style.display = 'block';
+ 
+// ── Highlights page (full page view) ─────────────────────────────────────────
+window.openHighlightsPage = function() {
+  const page = document.getElementById('highlightsPage');
+  if (!page) return;
+  page.style.display = 'block';
+  _populateHlPageBookSelect();
   renderHighlightsPage();
-}
-
-function closeHighlightsPage() { document.getElementById('highlightsPage').style.display = 'none'; }
-
-function extractHighlightsFromBook(book) {
-  const byCategory = {};
-  (window.HL_CATEGORIES || []).forEach(c => { byCategory[c.key] = []; });
-  ['p','m','f','per','ins'].forEach(k => { if (!byCategory[k]) byCategory[k] = []; });
-
-  (book.treeData || []).forEach(ch => {
-    (ch.topics || []).forEach(tp => {
-      (tp.sections || []).forEach(sec => {
-        if (!sec.content) return;
-        const tmp = document.createElement('div');
-        tmp.innerHTML = sec.content;
-        const selector = _allHlSpanSelectors();
-        tmp.querySelectorAll(selector).forEach(el => {
-          const text = el.textContent.trim();
-          if (!text) return;
-          let cat = el.dataset.hlCat || null;
-          if (!cat) {
-            const cls = Array.from(el.classList).find(c => c.startsWith('hl-span-'));
-            if (cls) cat = cls.replace('hl-span-', '');
-          }
-          if (!cat) return;
-          if (!byCategory[cat]) byCategory[cat] = [];
-          byCategory[cat].push({ text, bookName: book.name, loc: tp.name });
-        });
-      });
-    });
-  });
-
-  if (book.pdfHighlights) {
-    Object.entries(book.pdfHighlights).forEach(([pg, hls]) => {
-      if (!Array.isArray(hls)) return;
-      hls.forEach(hl => {
-        const cat = hl.type || 'p';
-        if (!byCategory[cat]) byCategory[cat] = [];
-        byCategory[cat].push({ text: hl.text || '', bookName: book.name, loc: 'Page ' + pg });
-      });
+};
+ 
+window.closeHighlightsPage = function() {
+  const page = document.getElementById('highlightsPage');
+  if (page) page.style.display = 'none';
+};
+ 
+function _populateHlPageBookSelect() {
+  const sel = document.getElementById('hlPageBookSelect');
+  if (!sel) return;
+  sel.innerHTML = '<option value="__all__">All Books</option>';
+  if (window.allBooks) {
+    window.allBooks.forEach(b => {
+      const opt = document.createElement('option');
+      opt.value = b.id; opt.textContent = b.name;
+      sel.appendChild(opt);
     });
   }
-
-  return byCategory;
 }
-
-function renderHighlightsPage() {
-  const bookId = document.getElementById('hlPageBookSelect').value;
-  const books = bookId === 'all' ? window.library : window.library.filter(b => b.id === bookId);
-
-  const combined = {};
-  (window.HL_CATEGORIES || []).forEach(c => { combined[c.key] = []; });
-  ['p','m','f','per','ins'].forEach(k => { if (!combined[k]) combined[k] = []; });
-
-  books.forEach(book => {
-    const byCat = extractHighlightsFromBook(book);
-    Object.entries(byCat).forEach(([k, arr]) => {
-      if (!combined[k]) combined[k] = [];
-      combined[k] = combined[k].concat(arr);
-    });
-  });
-
+ 
+window.renderHighlightsPage = function() {
   const container = document.getElementById('hlPageAllContent');
   if (!container) return;
   container.innerHTML = '';
-
-  (window.HL_CATEGORIES || []).forEach(cat => {
-    const items = combined[cat.key] || [];
+ 
+  if (!window.HL_CATEGORIES) return;
+ 
+  window.HL_CATEGORIES.forEach(cat => {
+    const spans = Array.from(document.querySelectorAll(
+      `.section-editor [data-hl-cat="${cat.key}"], #editor [data-hl-cat="${cat.key}"]`
+    ));
+    if (spans.length === 0) return;
+ 
     const section = document.createElement('div');
-    section.style.marginBottom = '2.5rem';
-
-    section.innerHTML = `<div style="font-family:'Cormorant Garamond',serif;font-size:clamp(20px,4vw,26px);font-weight:400;color:var(--cream);margin-bottom:1rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border-color);">${escHtml(cat.label)} <span style="font-size:16px;color:${cat.color};">(${items.length})</span></div>`;
-
-    if (!items.length) {
-      section.innerHTML += `<div style="color:var(--cream2);font-size:13px;font-style:italic;">No ${escHtml(cat.label)} highlights yet.</div>`;
-    } else {
-      const grid = document.createElement('div');
-      grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;';
-      items.forEach(item => {
-        const d = document.createElement('div');
-        d.style.cssText = `background:rgba(0,0,0,0.2);border:1px solid ${cat.color}44;border-radius:5px;padding:0.9rem 1rem;`;
-        const shortName = item.bookName.length > 20 ? item.bookName.substring(0,18)+'…' : item.bookName;
-        d.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;gap:0.5rem;"><span style="font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:${cat.color};flex-shrink:0;">${escHtml(cat.label.toUpperCase())}</span><span style="font-size:10px;color:var(--cream2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%;text-align:right;" title="${escHtml(item.bookName)}${item.loc ? ' · ' + escHtml(item.loc) : ''}">${escHtml(shortName)}${item.loc ? ' · ' + escHtml(item.loc) : ''}</span></div><div style="font-size:13px;color:var(--cream);line-height:1.65;font-family:'Lora',serif;word-break:break-word;">${escHtml(item.text.substring(0,280))}${item.text.length > 280 ? '…' : ''}</div>`;
-        grid.appendChild(d);
+    section.style.marginBottom = '2rem';
+ 
+    const heading = document.createElement('div');
+    heading.style.cssText = 'font-family:sans-serif;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:' + cat.color + ';margin-bottom:8px;';
+    heading.textContent = '✦ ' + cat.label;
+    section.appendChild(heading);
+ 
+    spans.forEach(span => {
+      const card = document.createElement('div');
+      card.className = 'hl-card hl-card-clickable';
+      card.style.borderLeft = `3px solid ${cat.color}`;
+      card.style.marginBottom = '6px';
+      const t = document.createElement('div');
+      t.className = 'hl-card-text'; t.textContent = span.textContent;
+      card.appendChild(t);
+      card.addEventListener('click', () => {
+        window.closeHighlightsPage();
+        setTimeout(() => {
+          span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          span.classList.add('hl-pulse');
+          setTimeout(() => span.classList.remove('hl-pulse'), 1000);
+        }, 300);
       });
-      section.appendChild(grid);
-    }
+      section.appendChild(card);
+    });
+ 
     container.appendChild(section);
   });
-}
-
-// ── Toolbar: setActiveHighlighter ────────────────────
-function setActiveHighlighter(type) {
-  if (activeHlType === type) {
-    activeHlType = null;
-    _syncHighlighterUI();
-    showToast('Highlighter off');
-  } else {
-    activeHlType = type;
-    _syncHighlighterUI();
-    const cat = window.HL_CAT_MAP && window.HL_CAT_MAP[type];
-    showToast('✦ ' + (cat ? cat.label : type) + ' highlighter on');
+ 
+  if (!container.children.length) {
+    container.innerHTML = '<div style="font-size:13px;color:#887fa0;font-style:italic;padding:2rem 0;">No highlights yet across any book.</div>';
   }
+};
+ 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+ 
+function _hexToRgbParts(hex) {
+  let h = hex.replace('#','');
+  if (h.length === 3) h = h.split('').map(x=>x+x).join('');
+  const r = parseInt(h.slice(0,2),16);
+  const g = parseInt(h.slice(2,4),16);
+  const b = parseInt(h.slice(4,6),16);
+  return `${r},${g},${b}`;
 }
-
-function _syncHighlighterUI() {
-  (window.HL_CATEGORIES || []).forEach(cat => {
-    const btn = document.getElementById('hl-btn-' + cat.key);
-    if (btn) btn.classList.toggle('hl-active', activeHlType === cat.key);
-  });
-}
-
-// ── Auto-highlight on mouseup / touchend ─────────────
-document.addEventListener('mouseup', e => {
-  if (!activeHlType) return;
-  if (e.target.closest('#hl-remove-btn')) return;
-  const sel = window.getSelection();
-  if (!sel || sel.isCollapsed) return;
-  const cat = window.HL_CAT_MAP && window.HL_CAT_MAP[activeHlType];
-  const color = cat ? cat.color : '#ffe566';
-  if (typeof pdfMode !== 'undefined' && pdfMode && typeof pdfCurrentPage !== 'undefined' && pdfCurrentPage !== null) {
-    if (typeof applyHighlightToPDF === 'function') applyHighlightToPDF(color, activeHlType);
-  } else {
-    applyPreciseHighlight(color, activeHlType);
-  }
-});
-
-document.addEventListener('touchend', e => {
-  if (!activeHlType) return;
-  setTimeout(() => {
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed) return;
-    const cat = window.HL_CAT_MAP && window.HL_CAT_MAP[activeHlType];
-    const color = cat ? cat.color : '#ffe566';
-    if (typeof pdfMode !== 'undefined' && pdfMode && typeof pdfCurrentPage !== 'undefined' && pdfCurrentPage !== null) {
-      if (typeof applyHighlightToPDF === 'function') applyHighlightToPDF(color, activeHlType);
-    } else {
-      applyPreciseHighlight(color, activeHlType);
-    }
-  }, 100);
-});
-
-// ── Legacy stubs ──────────────────────────────────────
-function openFactsPage() { openHighlightsPage(); }
-function closeFactsPage() { closeHighlightsPage(); }
-function renderFactsPage() { renderHighlightsPage(); }
-function filterHighlights() {}
-function switchHlTab() {}
-
-function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-window.openHighlightsPage  = openHighlightsPage;
-window.closeHighlightsPage = closeHighlightsPage;
-window.renderHighlightsPage = renderHighlightsPage;
-window.applyPreciseHighlight = applyPreciseHighlight;
-window.updateHL = updateHL;
-window.setActiveHighlighter = setActiveHighlighter;
-window.openFactsPage  = openFactsPage;
-window.closeFactsPage = closeFactsPage;
-window.renderFactsPage = renderFactsPage;
-window.filterHighlights = filterHighlights;
-window.switchHlTab = switchHlTab;

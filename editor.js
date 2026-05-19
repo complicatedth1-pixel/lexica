@@ -3,7 +3,21 @@
 // Must load last (reads globals from all other files)
 
 'use strict';
-
+// ── Hide user menu when editor is open ────────────────────────────────────────
+(function() {
+  const editorShell = document.getElementById('editor-shell');
+  const userMenu    = document.getElementById('userMenu');
+  if (!editorShell || !userMenu) return;
+ 
+  const obs = new MutationObserver(() => {
+    const isVisible = editorShell.classList.contains('visible');
+    userMenu.style.display = isVisible ? 'none' : '';
+  });
+  obs.observe(editorShell, { attributes: true, attributeFilter: ['class'] });
+ 
+  // Initial state
+  if (editorShell.classList.contains('visible')) userMenu.style.display = 'none';
+})();
 let treeData = [], bookName = 'My Book', highlights = {}, notes = {};
 let selectedChapterId = null, selectedTopicId = null;
 let dragSrc = null, secDragSrc = null;

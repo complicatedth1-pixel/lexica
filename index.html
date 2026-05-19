@@ -11,6 +11,14 @@
 <link rel="stylesheet" href="style-base.css">
 <link rel="stylesheet" href="style-editor.css">
 <link rel="stylesheet" href="search-modal.css">
+<style>
+/* Hide user menu when editor is open — applies regardless of DOM order */
+#editor-shell.visible ~ #userMenu,
+#editor-shell.visible + #userMenu,
+body:has(#editor-shell.visible) #userMenu {
+  display: none !important;
+}
+</style>
 </head>
 <body>
 
