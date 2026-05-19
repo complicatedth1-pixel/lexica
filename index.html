@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400;1,600&family=Outfit:wght@300;400;500;600&family=PT+Serif:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400;0,600;1,400&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=Crimson+Pro:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style-base.css">
 <link rel="stylesheet" href="style-editor.css">
-  <link rel="stylesheet" href="search-modal.css">
+<link rel="stylesheet" href="search-modal.css">
 </head>
 <body>
 
@@ -236,11 +236,7 @@
     <div class="eo-color" style="background:#2255a4" id="color-blue"></div>
     <div class="eo-color" style="background:#b5860f" id="color-gold"></div>
     <div class="topbar-sep"></div>
-    <button class="eo-hl hl-p" id="hl-p">✦ P</button>
-    <button class="eo-hl hl-m" id="hl-m">✦ M</button>
-    <button class="eo-hl hl-f" id="hl-f">✦ F</button>
-    <button class="eo-hl hl-per" id="hl-per" title="Personalities">✦ Per</button>
-    <button class="eo-hl hl-ins" id="hl-ins" title="Institutions &amp; Companies">✦ Ins</button>
+    <span id="hl-toolbar-buttons" style="display:contents;"></span>
     <div class="topbar-sep"></div>
     <button class="eo-btn" id="btn-link">Link</button>
     <button class="eo-icon-btn" id="btn-undo">↩</button>
@@ -316,19 +312,10 @@
           <button id="uploadPageBtn" style="width:100%;background:rgba(160,130,220,0.1);border:1px solid rgba(160,130,220,0.3);color:#c8b8e8;font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;padding:8px 10px;border-radius:4px;cursor:pointer;text-align:left;">⬆ Upload Section</button>
           <button id="exportPDFBtn" style="width:100%;background:rgba(212,135,42,0.1);border:1px solid rgba(212,135,42,0.25);color:#d4a060;font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;padding:8px 10px;border-radius:4px;cursor:pointer;text-align:left;">🖨 Export PDF</button>
         </div>
-        <!-- Highlights -->
-        <div class="rp-section-label">✦ P — Yellow</div>
-        <div id="hl-list-p"><div class="hl-empty">No P highlights yet</div></div>
-        <div class="rp-section-label" style="margin-top:14px;">✦ M — Green</div>
-        <div id="hl-list-m"><div class="hl-empty">No M highlights yet</div></div>
-        <div class="rp-section-label" style="margin-top:14px;">✦ F — Facts</div>
-        <div id="hl-list-f"><div class="hl-empty">No F highlights yet</div></div>
-        <div class="rp-section-label" style="margin-top:14px;">✦ Per — Personalities</div>
-        <div id="hl-list-per"><div class="hl-empty">No Per highlights yet</div></div>
-        <div class="rp-section-label" style="margin-top:14px;">✦ Ins — Institutions</div>
-        <div id="hl-list-ins"><div class="hl-empty">No Ins highlights yet</div></div>
+        <!-- Highlights — dynamically injected per category -->
+        <div id="hl-panel-categories"></div>
         <div class="rp-section-label" style="margin-top:18px;">Notes</div>
-        <div id="notes-list"><div class="hl-empty">No notes yet</div></div>
+        <div id="notes-list"><div class="hl-empty">No notes yet — groups with 2+ highlights auto-appear here</div></div>
       </div>
     </aside>
   </div>
@@ -414,7 +401,7 @@
   </div>
 </div>
 
-<!-- HIGHLIGHTS PAGE (unified — Facts is a subtab here) -->
+<!-- HIGHLIGHTS PAGE (unified — dynamic categories) -->
 <div id="highlightsPage" style="position:fixed;inset:0;z-index:150;overflow-y:auto;background:var(--ink);display:none;scrollbar-width:thin;-webkit-overflow-scrolling:touch;">
   <div style="padding:1rem 1.4rem;background:var(--ink);border-bottom:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:20;backdrop-filter:blur(16px);gap:1rem;flex-wrap:wrap;">
     <div class="logo-text">LEXICA<sup>✦</sup></div>
@@ -423,44 +410,16 @@
   <div style="padding:2.5rem 1.4rem 1.5rem;border-bottom:1px solid var(--border-color);">
     <div style="font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--amber);margin-bottom:0.8rem;font-weight:500;">✦ Your annotations</div>
     <h1 style="font-family:'Cormorant Garamond',serif;font-size:clamp(36px,8vw,56px);font-weight:300;color:var(--cream);line-height:1.1;">Your <em style="font-style:italic;color:var(--amber);">Highlights</em></h1>
-    <p style="font-size:13px;color:var(--cream2);margin-top:0.8rem;font-weight:300;">All highlights — P, M, F, Per, Ins — across every book and PDF.</p>
+    <p style="font-size:13px;color:var(--cream2);margin-top:0.8rem;font-weight:300;">All highlights across every book and PDF — now with 10+ flexible categories.</p>
   </div>
   <div style="padding:1.5rem 1.4rem;">
-    <!-- Controls row -->
+    <!-- Book filter -->
     <div style="margin-bottom:1.5rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
       <label style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--cream2);">Book</label>
       <select id="hlPageBookSelect" onchange="renderHighlightsPage()" style="background:var(--glass2);border:1px solid var(--border-color);color:var(--cream);font-family:'Outfit',sans-serif;font-size:13px;padding:0.5rem 0.8rem;border-radius:3px;outline:none;cursor:pointer;min-height:40px;max-width:200px;"></select>
-      <!-- Subtab buttons -->
-      <div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;" id="hlSubtabBar">
-        <button onclick="switchHlTab('all')" id="hlTabAll" style="background:var(--amber);border:none;color:var(--ink);font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;min-height:36px;">All</button>
-        <button onclick="switchHlTab('p')" id="hlTabP" style="background:transparent;border:1px solid rgba(255,229,102,0.4);color:#ffe566;font-family:'Outfit',sans-serif;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;min-height:36px;">P</button>
-        <button onclick="switchHlTab('m')" id="hlTabM" style="background:transparent;border:1px solid rgba(106,223,106,0.4);color:#6adf6a;font-family:'Outfit',sans-serif;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;min-height:36px;">M</button>
-        <button onclick="switchHlTab('f')" id="hlTabF" style="background:transparent;border:1px solid rgba(167,139,250,0.4);color:#a78bfa;font-family:'Outfit',sans-serif;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;min-height:36px;">F</button>
-        <button onclick="switchHlTab('per')" id="hlTabPer" style="background:transparent;border:1px solid rgba(251,146,60,0.4);color:#fb923c;font-family:'Outfit',sans-serif;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;min-height:36px;">Per</button>
-        <button onclick="switchHlTab('ins')" id="hlTabIns" style="background:transparent;border:1px solid rgba(34,211,238,0.4);color:#22d3ee;font-family:'Outfit',sans-serif;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:0.4rem 1rem;border-radius:2px;cursor:pointer;min-height:36px;">Ins</button>
-      </div>
     </div>
-    <!-- Sections (shown/hidden by tab) -->
-    <div id="hlPagePSection">
-      <div style="font-family:'Cormorant Garamond',serif;font-size:clamp(20px,4vw,26px);font-weight:400;color:var(--cream);margin-bottom:1rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border-color);">P Highlights <span id="hlPagePCount" style="font-size:16px;color:var(--amber);"></span></div>
-      <div id="hlPagePList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-bottom:2.5rem;"></div>
-    </div>
-    <div id="hlPageMSection">
-      <div style="font-family:'Cormorant Garamond',serif;font-size:clamp(20px,4vw,26px);font-weight:400;color:var(--cream);margin-bottom:1rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border-color);">M Highlights <span id="hlPageMCount" style="font-size:16px;color:#6adf6a;"></span></div>
-      <div id="hlPageMList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-bottom:2.5rem;"></div>
-    </div>
-    <div id="hlPageFSection">
-      <div style="font-family:'Cormorant Garamond',serif;font-size:clamp(20px,4vw,26px);font-weight:400;color:var(--cream);margin-bottom:1rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border-color);">F — Facts <span id="hlPageFCount" style="font-size:16px;color:#a78bfa;"></span></div>
-      <div id="hlPageFList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-bottom:2.5rem;"></div>
-    </div>
-    <div id="hlPagePerSection">
-      <div style="font-family:'Cormorant Garamond',serif;font-size:clamp(20px,4vw,26px);font-weight:400;color:var(--cream);margin-bottom:1rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border-color);">Per — Personalities <span id="hlPagePerCount" style="font-size:16px;color:#fb923c;"></span></div>
-      <div id="hlPagePerList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-bottom:2.5rem;"></div>
-    </div>
-    <div id="hlPageInsSection">
-      <div style="font-family:'Cormorant Garamond',serif;font-size:clamp(20px,4vw,26px);font-weight:400;color:var(--cream);margin-bottom:1rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border-color);">Ins — Institutions &amp; Companies <span id="hlPageInsCount" style="font-size:16px;color:#22d3ee;"></span></div>
-      <div id="hlPageInsList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-bottom:2.5rem;"></div>
-    </div>
+    <!-- All highlight sections rendered here by renderHighlightsPage() -->
+    <div id="hlPageAllContent"></div>
   </div>
 </div>
 
@@ -471,6 +430,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="auth.js"></script>
 <script src="prompt-settings.js"></script>
+<script src="highlight-categories.js"></script>
 <script src="library.js"></script>
 <script src="stopwatch.js"></script>
 <script src="highlights.js"></script>
@@ -478,6 +438,52 @@
 <script src="pdf.js"></script>
 <script src="search-modal.js"></script>
 <script src="editor.js"></script>
+
+<script>
+// Inject HL buttons into topbar dynamically from HL_CATEGORIES
+// Also inject right panel categories
+(function() {
+  function injectHLButtons() {
+    const container = document.getElementById('hl-toolbar-buttons');
+    if (!container || !window.HL_CATEGORIES) return;
+    container.innerHTML = '';
+    window.HL_CATEGORIES.forEach(cat => {
+      const btn = document.createElement('button');
+      btn.className = 'eo-hl';
+      btn.id = 'hl-btn-' + cat.key;
+      btn.title = cat.label;
+      btn.style.background = cat.color;
+      btn.style.color = '#000';
+      btn.style.fontSize = '9px';
+      btn.style.padding = '3px 7px';
+      btn.textContent = '✦ ' + cat.label;
+      container.appendChild(btn);
+    });
+  }
+
+  function injectRightPanelCategories() {
+    const panel = document.getElementById('hl-panel-categories');
+    if (!panel || !window.HL_CATEGORIES) return;
+    panel.innerHTML = '';
+    window.HL_CATEGORIES.forEach((cat, i) => {
+      const label = document.createElement('div');
+      label.className = 'rp-section-label';
+      label.style.marginTop = i === 0 ? '0' : '14px';
+      label.style.color = cat.color;
+      label.textContent = '✦ ' + cat.label;
+      panel.appendChild(label);
+
+      const list = document.createElement('div');
+      list.id = 'hl-list-' + cat.key;
+      list.innerHTML = `<div class="hl-empty">No ${cat.label} highlights yet</div>`;
+      panel.appendChild(list);
+    });
+  }
+
+  injectHLButtons();
+  injectRightPanelCategories();
+})();
+</script>
 
 </body>
 </html>

@@ -235,7 +235,11 @@ function renderPage() {
     // Show plain editor as a single A4 sheet
     plainEditor.classList.add('a4-editor-standalone');
     const markBtn = document.getElementById('markReadBtn'); if (markBtn) markBtn.style.display = 'none';
-    updateWordCount(); return;
+     updateWordCount();
+  // Init group highlights from Claude-pre-applied HTML
+  setTimeout(initGroupHighlightsFromHTML, 120);
+
+  return;
   }
   const ch = getChapter(selectedChapterId);
   plainEditor.style.display = 'none';
@@ -685,58 +689,26 @@ document.getElementById('btn-redo').addEventListener('mousedown', e => { e.preve
 editor.addEventListener('click', e => { const a = e.target.closest('a'); if (a && a.href) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); } });
 
 // Highlight buttons
-let activeHlType = null; // 'p', 'm', 'f', 'per', 'ins', or null
+//let activeHlType = null; // 'p', 'm', 'f', 'per', 'ins', or null
 
-function setActiveHighlighter(type) {
-  const hlP   = document.getElementById('hl-p');
-  const hlM   = document.getElementById('hl-m');
-  const hlF   = document.getElementById('hl-f');
-  const hlPer = document.getElementById('hl-per');
-  const hlIns = document.getElementById('hl-ins');
-  if (activeHlType === type) {
-    activeHlType = null;
-    [hlP, hlM, hlF, hlPer, hlIns].forEach(el => el && el.classList.remove('hl-active'));
-    showToast('Highlighter off');
-  } else {
-    activeHlType = type;
-    hlP   && hlP.classList.toggle('hl-active', type === 'p');
-    hlM   && hlM.classList.toggle('hl-active', type === 'm');
-    hlF   && hlF.classList.toggle('hl-active', type === 'f');
-    hlPer && hlPer.classList.toggle('hl-active', type === 'per');
-    hlIns && hlIns.classList.toggle('hl-active', type === 'ins');
-    const labels = { p:'Yellow (P)', m:'Green (M)', f:'Purple (F — Facts)', per:'Orange (Per — Personalities)', ins:'Cyan (Ins — Institutions)' };
-    showToast('✦ ' + (labels[type] || type) + ' highlighter on');
+// Highlight toolbar buttons are now built dynamically in index.html
+// setActiveHighlighter and auto-highlight listeners live in highlights.js
+// activeHlType is declared in highlights.js
+ 
+// Wire up dynamically-rendered hl buttons after DOM ready
+(function() {
+  function _wireHlButtons() {
+    (window.HL_CATEGORIES || []).forEach(cat => {
+      const btn = document.getElementById('hl-btn-' + cat.key);
+      if (btn) {
+        btn.addEventListener('click', e => { e.preventDefault(); setActiveHighlighter(cat.key); });
+      }
+    });
   }
-}
+  // HL_CATEGORIES is available immediately (highlight-categories.js loads before editor.js)
+  _wireHlButtons();
+})();
 
-document.getElementById('hl-p').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('p'); });
-document.getElementById('hl-m').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('m'); });
-document.getElementById('hl-f').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('f'); });
-document.getElementById('hl-per').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('per'); });
-document.getElementById('hl-ins').addEventListener('click', e => { e.preventDefault(); setActiveHighlighter('ins'); });
-
-// Auto-highlight on mouseup / touchend when a highlighter is active
-const _hlColors = { p: '#ffe566', m: '#7ddb7d', f: '#a78bfa', per: '#fb923c', ins: '#22d3ee' };
-
-document.addEventListener('mouseup', e => {
-  if (!activeHlType) return;
-  const sel = window.getSelection();
-  if (!sel || sel.isCollapsed) return;
-  const color = _hlColors[activeHlType] || '#ffe566';
-  if (pdfMode && pdfCurrentPage !== null) applyHighlightToPDF(color, activeHlType);
-  else applyPreciseHighlight(color, activeHlType);
-});
-
-document.addEventListener('touchend', e => {
-  if (!activeHlType) return;
-  setTimeout(() => {
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed) return;
-    const color = _hlColors[activeHlType] || '#ffe566';
-    if (pdfMode && pdfCurrentPage !== null) applyHighlightToPDF(color, activeHlType);
-    else applyPreciseHighlight(color, activeHlType);
-  }, 100);
-});
 
 document.getElementById('exportPDFBtn').addEventListener('click', () => window.print());
 

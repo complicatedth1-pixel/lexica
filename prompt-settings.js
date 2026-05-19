@@ -230,6 +230,15 @@ WHAT NOT TO DO:
 - "For example" ya "imagine" explicitly bolne ki zaroorat nahi — example naturally flow mein aana chahiye.
 - Koi bhi concept mention karo — uski prerequisites skip mat karo. Naam liya toh samjhana padega — prior chain complete honi chahiye.
 
+HIGHLIGHT INSTRUCTIONS (non-negotiable):
+- Every key fact in the HTML must be highlighted using <span> tags.
+- Use these attributes: class="hl-span-[cat]" data-hl-cat="[cat]" data-group="[group-name]"
+- Category keys: per (Person), org (Organisation), place (Place), date (Date), event (Event), why (Cause), effect (Effect), concept (Concept), law (Law/Policy), data (Data/Stat)
+- Group name: short slug for the connected idea (e.g. "kalinga-war", "maurya-empire")
+- All highlights in a group share the same data-group value
+- Groups with 2+ highlights auto-assemble into a revision note
+- For standalone notes with no group: use class="hl-span-note" data-hl-cat="note" (no data-group)
+
 SOURCES & FACTS — NON-NEGOTIABLE:
 - Aaj ki date: ${today}. Current economic year: ${econYear}.
 - SIRF latest figures. Budget ${budgetYear} (Feb ${presentedYear} presented). Latest RBI/MoSPI/PIB data only.
@@ -262,7 +271,7 @@ OUTPUT ONLY this HTML — no preamble, no explanation, no markdown fences, nothi
     <p>[Opening — set the problem/need first, never a definition. 2-4 sentences.]</p>
 
     <ul>
-      <li><strong>[Key point]</strong> — [explanation, grounded in reality]</li>
+      <li><strong>[Key point]</strong> — [explanation, grounded in reality. Wrap every key fact in <span> with proper highlight attributes as per HIGHLIGHT INSTRUCTIONS]</li>
       <li><strong>[Key point]</strong> — [explanation] <a href="[url]" target="_blank">[Source Name]</a></li>
     </ul>
 
@@ -271,8 +280,8 @@ OUTPUT ONLY this HTML — no preamble, no explanation, no markdown fences, nothi
     <div class="revision-box">
       <h4>Revision — [Section Short Title]</h4>
       <ul>
-        <li><strong>[Term/Concept]:</strong> [tight fact or definition] — <a href="[url]" target="_blank">[Source]</a></li>
-        <li><strong>[Term/Concept]:</strong> [tight fact or definition]</li>
+        <li><strong>[Term/Concept]:</strong> [tight fact or definition — use highlight spans here too] — <a href="[url]" target="_blank">[Source]</a></li>
+        <li><strong>[Term/Concept]:</strong> [tight fact or definition — use highlight spans]</li>
         <li><strong>UPSC Angle:</strong> [what examiner expects / common trap / keyword to use]</li>
       </ul>
     </div>
@@ -284,8 +293,8 @@ OUTPUT ONLY this HTML — no preamble, no explanation, no markdown fences, nothi
   <div class="revision-box" style="margin-top: 32px; background: var(--bg3);">
     <h4>BLOCK [N] COMPLETE REVISION — [PAGE TITLE IN CAPS]</h4>
     <ul>
-      <li><strong>[Key fact/concept]:</strong> [tight recall point] — <a href="[url]" target="_blank">[Source]</a></li>
-      <li><strong>[Key fact/concept]:</strong> [tight recall point]</li>
+      <li><strong>[Key fact/concept]:</strong> [tight recall point — use highlight spans] — <a href="[url]" target="_blank">[Source]</a></li>
+      <li><strong>[Key fact/concept]:</strong> [tight recall point — use highlight spans]</li>
       <li><strong>UPSC Keyword:</strong> [exact term/phrase to use in answers]</li>
     </ul>
   </div>
@@ -307,7 +316,8 @@ CRITICAL OUTPUT RULES:
 9. Output nothing outside the <div class="lesson-content"> — no extra HTML, no comments outside section markers.
 10. sometimes while explaining x you might need multiple other things, i want those other things to be explained too alongside mentioning them
 11. PRIOR KNOWLEDGE CHAIN (non-negotiable): Har concept se pehle — us concept ko samajhne ke liye kya prior knowledge chahiye, woh pehle establish karo. Ek line mein nahi — properly. Agar woh prior bhi shaky ho sakta hai, usse bhi establish karo. Concept tab aayega jab chain complete ho. Koi bhi variable ya term arbitrary nahi lagna chahiye — reader ko clearly pata hona chahiye yeh cheez exist kyun karti hai.
-12. PROBLEM → SOLUTION CHAIN (non-negotiable jab concept kisi problem ke response mein bana ho): Pehle problem establish karo jo is concept se pehle thi. Phir solution (concept). Phir us solution ki limitation agar hai. Phir next solution. Yeh especially apply hota hai metrics, policies, aur mechanisms pe — jo evolve hue hain kisi pehle wale ki kami se.`;
+12. PROBLEM → SOLUTION CHAIN (non-negotiable jab concept kisi problem ke response mein bana ho): Pehle problem establish karo jo is concept se pehle thi. Phir solution (concept). Phir us solution ki limitation agar hai. Phir next solution. Yeh especially apply hota hai metrics, policies, aur mechanisms pe — jo evolve hue hain kisi pehle wale ki kami se.
+13. HIGHLIGHT RULES: Har key fact ko <span> mein wrap karo. Proper category select karo (per, org, place, date, event, why, effect, concept, law, data). Same group ka slug group name do. Groups with 2+ highlights will auto-assemble into revision notes. Standalone notes ke liye class="hl-span-note" data-hl-cat="note" with no data-group.`;
 }
 
 // ── Getters (called fresh each time so date is always current) ─
