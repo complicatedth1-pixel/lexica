@@ -3,20 +3,19 @@
 // Must load last (reads globals from all other files)
 
 'use strict';
-// ── Hide user menu when editor is open ────────────────────────────────────────
+// ── Hide user menu when editor is open ────────────────────────
 (function() {
-  const editorShell = document.getElementById('editor-shell');
-  const userMenu    = document.getElementById('userMenu');
-  if (!editorShell || !userMenu) return;
- 
-  const obs = new MutationObserver(() => {
-    const isVisible = editorShell.classList.contains('visible');
-    userMenu.style.display = isVisible ? 'none' : '';
-  });
-  obs.observe(editorShell, { attributes: true, attributeFilter: ['class'] });
- 
-  // Initial state
-  if (editorShell.classList.contains('visible')) userMenu.style.display = 'none';
+  function _syncUserMenu() {
+    var shell = document.getElementById('editor-shell');
+    var menu  = document.getElementById('userMenu');
+    if (!shell || !menu) return;
+    menu.style.display = shell.classList.contains('visible') ? 'none' : '';
+  }
+  var _shell = document.getElementById('editor-shell');
+  if (_shell) {
+    new MutationObserver(_syncUserMenu).observe(_shell, { attributes: true, attributeFilter: ['class'] });
+  }
+  _syncUserMenu();
 })();
 let treeData = [], bookName = 'My Book', highlights = {}, notes = {};
 let selectedChapterId = null, selectedTopicId = null;
@@ -594,19 +593,7 @@ document.getElementById('btn-redo').addEventListener('mousedown', e => { e.preve
 
 editor.addEventListener('click', e => { const a = e.target.closest('a'); if (a && a.href) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); } });
 
-// Wire HL buttons (FIX #3: ensure buttons are wired after dynamic injection)
-(function() {
-  function _wireHlButtons() {
-    (window.HL_CATEGORIES || []).forEach(cat => {
-      const btn = document.getElementById('hl-btn-' + cat.key);
-      if (btn) {
-        btn.addEventListener('click', e => { e.preventDefault(); setActiveHighlighter(cat.key); });
-      }
-    });
-  }
-  _wireHlButtons();
-  // Re-wire is handled by _injectHLButtons below (called after category changes)
-})();
+
 
 document.getElementById('exportPDFBtn').addEventListener('click', () => window.print());
 

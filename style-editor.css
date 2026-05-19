@@ -489,3 +489,24 @@
 #editor-shell.visible + #userMenu {
   display: none !important;
 }
+/* ── TOPBAR HORIZONTAL SCROLL FIX ── */
+.topbar {
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  flex-wrap: nowrap !important;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.topbar::-webkit-scrollbar { display: none; }
+
+/* Prevent any topbar child from shrinking to zero — keeps all buttons reachable */
+.topbar > * {
+  flex-shrink: 0;
+}
+
+/* ── HIDE USER MENU IN EDITOR ── */
+/* JS-based hide is in editor.js — this is a CSS fallback */
+#editor-shell.visible ~ #userMenu {
+  display: none !important;
+}
