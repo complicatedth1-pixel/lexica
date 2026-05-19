@@ -27,7 +27,7 @@ function getAllPagesWithWPM(confirmedOnly = false) {
           text = text.trim();
           const wc = text ? text.split(/\s+/).filter(Boolean).length : (tp.wordCount || 0);
           const wpm = (timeSpentSec > 5 && wc > 0) ? Math.round((wc/timeSpentSec)*60) : null;
-          pages.push({ pageName: tp.name, bookName: book.name, chapterName: ch.name, wordCount: wc, timeSpentMs, timeSpentSec, wpm, isPDF: false, confirmed: tp.confirmed === true });
+          pages.push({ pageName: tp.name, bookName: book.name, chapterName: ch.name, wordCount: wc, timeSpentMs, timeSpentSec, wpm, isPDF: false, confirmed: tp.confirmed === true, bookId: book.id, topicId: tp.id });
         });
       });
     }
@@ -40,7 +40,7 @@ function getAllPagesWithWPM(confirmedOnly = false) {
         const timeSpentSec = timeSpentMs / 1000;
         const wc = WORDS_PER_PDF_PAGE;
         const wpm = (timeSpentSec > 5) ? Math.round((wc / timeSpentSec) * 60) : null;
-        pages.push({ pageName: `Page ${pageNum}`, bookName: book.name, chapterName: '', wordCount: wc, timeSpentMs, timeSpentSec, wpm, isPDF: true, pageNum: parseInt(pageNum), confirmed: isConfirmed });
+        pages.push({ pageName: `Page ${pageNum}`, bookName: book.name, chapterName: '', wordCount: wc, timeSpentMs, timeSpentSec, wpm, isPDF: true, pageNum: parseInt(pageNum), confirmed: isConfirmed, bookId: book.id, topicId: null });
       });
     }
   });
@@ -89,6 +89,32 @@ if (book.isPDFViewer && pageNum !== undefined && pageNum !== 'undefined') {
   showToast('✓ Page marked as read');
   renderAnalytics();
 }
+  }
+}
+
+function unconfirmPage(bookId, topicId, pageNum) {
+  const book = window.library.find(b => b.id === bookId);
+  if (!book) return;
+  if (book.isPDFViewer && pageNum !== undefined && pageNum !== 'undefined') {
+    if (book.pageConfirmed) {
+      book.pageConfirmed[String(pageNum)] = false;
+      delete book.pageConfirmed[String(pageNum)];
+    }
+    saveBook(book);
+    showToast('↩ Page moved to unconfirmed');
+    renderAnalytics();
+  } else if (topicId) {
+    let found = false;
+    (book.treeData||[]).forEach(ch => { ch.topics.forEach(tp => { if (tp.id === topicId) { tp.confirmed = false; found = true; } }); });
+    if (found) {
+      // Sync global treeData if this is the active book
+      if (book.id === window.activeBookId && typeof treeData !== 'undefined') {
+        treeData = book.treeData;
+      }
+      saveBook(book);
+      showToast('↩ Page moved to unconfirmed');
+      renderAnalytics();
+    }
   }
 }
 
@@ -164,7 +190,13 @@ function renderAnalytics() {
 
   const buildTable = (rows, isFast) => {
     if (!rows.length) return `<div class="analytics-empty">No confirmed pages with tracked time yet.</div>`;
-    return `<table class="analytics-table"><thead><tr><th>#</th><th>Page</th><th>Book</th><th>WPM</th></tr></thead><tbody>${rows.map((p,i) => `<tr><td><span class="rank-badge">${i+1}</span></td><td>${escHtml(p.pageName)}</td><td style="font-size:11px;color:var(--cream2);">${escHtml(p.bookName)}</td><td><span class="wpm-pill ${isFast?'fast':'slow'}">${p.wpm}</span></td></tr>`).join('')}</tbody></table>`;
+    return `<table class="analytics-table"><thead><tr><th>#</th><th>Page</th><th>Book</th><th>WPM</th><th></th></tr></thead><tbody>${rows.map((p,i) => `<tr>
+      <td><span class="rank-badge">${i+1}</span></td>
+      <td>${escHtml(p.pageName)}</td>
+      <td style="font-size:11px;color:var(--cream2);">${escHtml(p.bookName)}</td>
+      <td><span class="wpm-pill ${isFast?'fast':'slow'}">${p.wpm}</span></td>
+      <td><button onclick="unconfirmPage('${p.bookId}','${p.topicId||''}',${p.pageNum!==undefined?p.pageNum:'undefined'})" title="Remove from rankings" style="background:rgba(220,80,80,0.1);border:1px solid rgba(220,80,80,0.25);color:#e07070;font-family:sans-serif;font-size:11px;padding:3px 8px;border-radius:3px;cursor:pointer;line-height:1;">✕</button></td>
+    </tr>`).join('')}</tbody></table>`;
   };
   const sorted = [...pagesWithWpm].sort((a,b) => b.wpm-a.wpm);
   document.getElementById('fastestTableWrap').innerHTML = buildTable(sorted.slice(0,5), true);
@@ -278,5 +310,6 @@ function confirmFromFilter() {
 window.openAnalytics = openAnalytics;
 window.closeAnalytics = closeAnalytics;
 window.confirmPage = confirmPage;
+window.unconfirmPage = unconfirmPage;
 window.confirmAllUnconfirmed = confirmAllUnconfirmed;
 window.confirmFromFilter = confirmFromFilter;
