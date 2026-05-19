@@ -7,7 +7,10 @@
 let treeData = [], bookName = 'My Book', highlights = {}, notes = {};
 let selectedChapterId = null, selectedTopicId = null;
 let dragSrc = null, secDragSrc = null;
-let _savedRange = null; // saved selection range for mobile highlight support
+let _savedRange = null;
+
+// FIX #1: Declare autosaveTimer at module scope so triggerAutosave never throws ReferenceError
+let autosaveTimer = null;
 
 // ── Helpers ──────────────────────────────────────────
 function getChapter(cid) { return treeData.find(c => c.id === cid); }
@@ -21,10 +24,6 @@ function captureSel() {
 
 function restoreSel() {
   if (!_savedRange) return false;
-  // ── FIX: Validate that the saved range's nodes are still attached to the
-  // document. After renderPage() replaces section DOM, _savedRange points to
-  // detached nodes. addRange() on a detached range silently succeeds but
-  // produces a collapsed selection, causing "no text selected" on next highlight.
   try {
     const sc = _savedRange.startContainer;
     const ec = _savedRange.endContainer;
@@ -35,7 +34,6 @@ function restoreSel() {
     const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(_savedRange);
-    // Double-check the restored selection is not collapsed
     if (sel.isCollapsed) { _savedRange = null; return false; }
     return true;
   } catch(e) {
@@ -84,9 +82,7 @@ document.getElementById('fontPicker').addEventListener('change', function() { do
 
 // ── Tree render ───────────────────────────────────────
 function renderTree(filter) {
-  // Clear stale saved range whenever the tree re-renders (DOM is about to change)
   _savedRange = null;
-
   const list = document.getElementById('chapterList'); list.innerHTML = '';
   const q = (filter || '').toLowerCase();
   treeData.forEach(ch => {
@@ -221,9 +217,7 @@ new MutationObserver(injectChapterProgress).observe(document.getElementById('cha
 
 // ── Page / Section renderer ───────────────────────────
 function renderPage() {
-  // Clear stale saved range — section DOM is about to be replaced
   _savedRange = null;
-
   const container = document.getElementById('sectionsContainer'), plainEditor = document.getElementById('editor');
   const titleBar = document.getElementById('pageTitleBar'), topicLabel = document.getElementById('pageTopicLabel');
   const chapterLabel = document.getElementById('pageChapterLabel'), pageProgress = document.getElementById('pageProgress');
@@ -232,14 +226,11 @@ function renderPage() {
     container.innerHTML = '';
     plainEditor.style.display = 'block';
     titleBar.style.display = 'none';
-    // Show plain editor as a single A4 sheet
     plainEditor.classList.add('a4-editor-standalone');
     const markBtn = document.getElementById('markReadBtn'); if (markBtn) markBtn.style.display = 'none';
-     updateWordCount();
-  // Init group highlights from Claude-pre-applied HTML
-  setTimeout(initGroupHighlightsFromHTML, 120);
-
-  return;
+    updateWordCount();
+    setTimeout(initGroupHighlightsFromHTML, 120);
+    return;
   }
   const ch = getChapter(selectedChapterId);
   plainEditor.style.display = 'none';
@@ -248,8 +239,6 @@ function renderPage() {
   titleBar.style.marginBottom = '0';
   topicLabel.textContent = tp.name; chapterLabel.textContent = ch ? '— ' + ch.name : '';
 
-  // ── Load this topic's accumulated time into the stopwatch display ──
-  // (stopwatch.js owns swElapsed/swRunning; we only set display when stopped)
   if (!swRunning) {
     swElapsed = tp.timeSpent || 0;
     swSessionElapsed = 0;
@@ -268,10 +257,8 @@ function renderPage() {
   }
   if (!tp.sections) tp.sections = [];
 
-  // ── A4 continuous flow: all sections in one scrollable sheet, page breaks are visual overlays ──
   container.innerHTML = '';
 
-  // Topic header card (not an A4 sheet, just a label strip)
   const headerSheet = document.createElement('div');
   headerSheet.className = 'a4-topic-header';
   headerSheet.innerHTML = `<div class="a4-topic-name">${escHtml(tp.name)}</div><div class="a4-topic-meta">${ch ? escHtml(ch.name) : ''} ${pageProgress.textContent ? '· ' + pageProgress.textContent : ''}</div>`;
@@ -285,7 +272,6 @@ function renderPage() {
     updateWordCount(); return;
   }
 
-  // Single continuous A4-width sheet that holds all sections
   const pageWrap = document.createElement('div');
   pageWrap.className = 'a4-page-wrap';
   const sheet = document.createElement('div');
@@ -293,16 +279,14 @@ function renderPage() {
   pageWrap.appendChild(sheet);
   container.appendChild(pageWrap);
 
-  // Overlay container for page-break ruler lines (positioned absolute over the sheet)
   const rulerOverlay = document.createElement('div');
   rulerOverlay.className = 'a4-ruler-overlay';
   pageWrap.appendChild(rulerOverlay);
 
-  // A4 at 96dpi: content height per page = 1123px total - 56px top padding - 72px bottom padding = 995px
   const A4_TOTAL = 1123;
   const A4_PAD_TOP = 56;
   const A4_PAD_BOTTOM = 72;
-  const A4_CONTENT = A4_TOTAL - A4_PAD_TOP - A4_PAD_BOTTOM; // 995px
+  const A4_CONTENT = A4_TOTAL - A4_PAD_TOP - A4_PAD_BOTTOM;
 
   function updatePageRulers() {
     rulerOverlay.innerHTML = '';
@@ -319,7 +303,6 @@ function renderPage() {
       ruler.appendChild(label);
       rulerOverlay.appendChild(ruler);
     }
-    // Update page count badge in topbar area
     const pgInfo = document.getElementById('pageProgress');
     if (pgInfo && ch && ch.topics) {
       const pn = ch.topics.findIndex(t => t.id === tp.id) + 1;
@@ -327,13 +310,11 @@ function renderPage() {
     }
   }
 
-  // Page number badge (top-right, purely cosmetic — shows visual A4 sheet count)
   const pgBadge = document.createElement('div');
   pgBadge.className = 'a4-page-number';
   pgBadge.textContent = '1';
   sheet.appendChild(pgBadge);
 
-  // Update the cosmetic badge when scrolling (no time tracking side-effects)
   function updateCurrentPageBadge() {
     const docArea = document.querySelector('.doc-area');
     if (!docArea) return;
@@ -349,12 +330,10 @@ function renderPage() {
   }
 
   tp.sections.forEach((sec, idx) => {
-    // Section wrapper (no page boundary enforced)
     const secWrap = document.createElement('div');
     secWrap.className = 'a4-section-wrap';
     secWrap.dataset.sid = sec.id;
 
-    // Section header (title + collapse toggle)
     const secHeader = document.createElement('div');
     secHeader.className = 'a4-section-header';
     const isOpen = sec.open !== false;
@@ -362,7 +341,6 @@ function renderPage() {
     secHeader.innerHTML = `<span class="a4-sec-toggle ${isOpen ? 'open' : ''}">›</span><span class="a4-sec-title">${escHtml(sec.title)}</span><span class="section-status ${hasContent ? 'has-content' : ''}">${hasContent ? 'Has content' : 'Empty'}</span>`;
     secWrap.appendChild(secHeader);
 
-    // Section body (the actual editor)
     const secBody = document.createElement('div');
     secBody.className = 'a4-section-body' + (isOpen ? '' : ' collapsed');
 
@@ -384,17 +362,20 @@ function renderPage() {
     secWrap.appendChild(secBody);
     sheet.appendChild(secWrap);
 
-    // Toggle collapse on header click
     secHeader.addEventListener('click', () => {
       sec.open = sec.open === false ? true : false;
       secHeader.querySelector('.a4-sec-toggle').classList.toggle('open', sec.open !== false);
       secBody.classList.toggle('collapsed', sec.open === false);
     });
 
-    // Editor events
+    // FIX #3: Manual highlighting — ensure mouseup on section editor captures selection
+    // and also triggers applyPreciseHighlight when a highlighter is active.
+    // We do NOT fire highlight here (the global mouseup listener in highlights.js handles it).
+    // We only ensure captureSel is called reliably.
     secEditor.addEventListener('touchend', () => { setTimeout(() => captureSel(), 50); });
     secEditor.addEventListener('mouseup', () => captureSel());
     secEditor.addEventListener('keyup', () => captureSel());
+
     secEditor.addEventListener('input', () => {
       sec.content = secEditor.innerHTML;
       const hasC = secEditor.textContent.trim().length > 0;
@@ -406,17 +387,11 @@ function renderPage() {
     secEditor.addEventListener('click', e => { const a = e.target.closest('a'); if (a && a.href) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); } });
     secEditor.addEventListener('input', () => setTimeout(updateHL, 80));
     secEditor.addEventListener('paste', e => handleEditorPaste(e, secEditor, sec));
-
-    // Update rulers whenever content changes height
-    secEditor.addEventListener('input', () => {
-      requestAnimationFrame(updatePageRulers);
-    });
+    secEditor.addEventListener('input', () => { requestAnimationFrame(updatePageRulers); });
   });
 
-  // Draw page rulers after initial render
   requestAnimationFrame(() => { updatePageRulers(); updateCurrentPageBadge(); });
 
-  // Keep rulers updated when sheet resizes (images load, window resize)
   if (window.ResizeObserver) {
     const ro = new ResizeObserver(() => updatePageRulers());
     ro.observe(sheet);
@@ -424,6 +399,8 @@ function renderPage() {
   }
 
   updateWordCount();
+  // Re-stamp highlight classes from data-hl-cat on pre-filled content
+  setTimeout(initGroupHighlightsFromHTML, 80);
 }
 
 // ── Manage Sections Modal ─────────────────────────────
@@ -456,52 +433,18 @@ function renderSectionsList() {
 }
 
 // ── Prompt builders ───────────────────────────────────
-// These pull the active preset instructions from prompt-settings.js,
-// then append a minimal structural task block so the output format
-// stays consistent regardless of which preset is active.
-
 function buildPagePrompt() {
   const tp = getSelectedTopic();
   const ch = getChapter(selectedChapterId);
   if (!tp || !ch) return '(No topic selected)';
-
   const sections = (tp.sections || []).map((s, i) => `${i + 1}. ${s.title}`).join('\n');
-
-  // Pull full instructions from the active preset (falls back to built-in default)
-  const instructions = window.promptSettings
-    ? window.promptSettings.getInstructions('page')
-    : '';
-
-  // Append the task-specific context block.
-  // The preset's own TASK section already contains the full HTML template,
-  // so we only need to inject the live book/chapter/page/section values.
-  return `${instructions}
-
----
-
-Book: ${bookName}
-Chapter: ${ch.name}
-Page (data-page): ${tp.name}
-Sections to cover (in exact order):
-${sections || '(none defined yet — create appropriate sections for this page)'}`;
+  const instructions = window.promptSettings ? window.promptSettings.getInstructions('page') : '';
+  return `${instructions}\n\n---\n\nBook: ${bookName}\nChapter: ${ch.name}\nPage (data-page): ${tp.name}\nSections to cover (in exact order):\n${sections || '(none defined yet — create appropriate sections for this page)'}`;
 }
 
 function buildChapterPrompt() {
-  // Pull full instructions from the active preset (falls back to built-in default)
-  const instructions = window.promptSettings
-    ? window.promptSettings.getInstructions('index')
-    : '';
-
-  // Append the task-specific context block.
-  // The preset's own TASK section already contains the full HTML template
-  // (with .page and .section divs). We only inject the book name and topic placeholder.
-  return `${instructions}
-
----
-
-Book: ${bookName}
-
-Topic to structure: [YOUR TOPIC HERE]`;
+  const instructions = window.promptSettings ? window.promptSettings.getInstructions('index') : '';
+  return `${instructions}\n\n---\n\nBook: ${bookName}\n\nTopic to structure: [YOUR TOPIC HERE]`;
 }
 
 // ── Upload Page / Chapter Modals ──────────────────────
@@ -536,37 +479,17 @@ document.getElementById('uploadChapterFile').addEventListener('change', function
       const pageEls = Array.from(indexEl.querySelectorAll('.page')).sort((a,b) => parseInt(a.getAttribute('order')||0)-parseInt(b.getAttribute('order')||0));
       if (!pageEls.length) { status.textContent = '❌ No page elements found'; status.style.color = '#ff7070'; return; }
       const ch = {
-        id: uid(),
-        name: chName,
-        open: true,
+        id: uid(), name: chName, open: true,
         topics: pageEls.map(p => {
-          // Page title: first line of text content (excludes nested .section text)
           const titleNode = p.querySelector('.page-title');
-          const name = titleNode
-            ? titleNode.textContent.trim()
-            : p.childNodes[0]?.textContent?.trim() || p.textContent.trim().split('\n')[0].trim();
-          // Sections: read .section divs inside this page, sorted by order attr
-          const sectionEls = Array.from(p.querySelectorAll('.section')).sort(
-            (a, b) => parseFloat(a.getAttribute('order') || 0) - parseFloat(b.getAttribute('order') || 0)
-          );
-          return {
-            id: uid(),
-            name,
-            sections: sectionEls.map(s => ({
-              id: uid(),
-              title: s.textContent.trim(),
-              content: '',
-              open: true
-            }))
-          };
+          const name = titleNode ? titleNode.textContent.trim() : p.childNodes[0]?.textContent?.trim() || p.textContent.trim().split('\n')[0].trim();
+          const sectionEls = Array.from(p.querySelectorAll('.section')).sort((a,b) => parseFloat(a.getAttribute('order')||0)-parseFloat(b.getAttribute('order')||0));
+          return { id: uid(), name, sections: sectionEls.map(s => ({ id: uid(), title: s.textContent.trim(), content: '', open: true })) };
         })
       };
       treeData.push(ch); selectedChapterId = ch.id; selectedTopicId = null; saveAll(); renderTree(); renderPage();
-      saveLibrary()
-        .then(() => showToast(`✓ Index saved — "${chName}" with ${ch.topics.length} pages`))
-        .catch(() => showToast(`✓ Index saved locally — "${chName}"`));
-      status.textContent = `✓ Created "${chName}" with ${ch.topics.length} topics.`;
-      status.style.color = '#90dba0';
+      saveLibrary().then(() => showToast(`✓ Index saved — "${chName}" with ${ch.topics.length} pages`)).catch(() => showToast(`✓ Index saved locally — "${chName}"`));
+      status.textContent = `✓ Created "${chName}" with ${ch.topics.length} topics.`; status.style.color = '#90dba0';
       uploadChapterModal.classList.remove('open');
     } catch(err) { status.textContent = '❌ Error: ' + err.message; status.style.color = '#ff7070'; }
   };
@@ -575,31 +498,12 @@ document.getElementById('uploadChapterFile').addEventListener('change', function
 
 let aiTargetSection = null;
 function openAIGenForSection(sec) {
-  const tp = getSelectedTopic();
-  const ch = getChapter(selectedChapterId);
+  const tp = getSelectedTopic(); const ch = getChapter(selectedChapterId);
   if (!tp || !ch) return;
   aiTargetSection = sec;
-
-  // Pull full page instructions from active preset
-  const instructions = window.promptSettings
-    ? window.promptSettings.getInstructions('page')
-    : '';
-
-  // Inject single-section context. The preset template already includes
-  // the full lesson-section HTML structure so we only supply live values.
+  const instructions = window.promptSettings ? window.promptSettings.getInstructions('page') : '';
   document.getElementById('pagePromptBox').textContent =
-    `${instructions}
-
----
-
-Book: ${bookName}
-Chapter: ${ch.name}
-Page (data-page): ${tp.name}
-Sections to cover (in exact order):
-1. ${sec.title}
-
-NOTE: Generate content for this single section only.`;
-
+    `${instructions}\n\n---\n\nBook: ${bookName}\nChapter: ${ch.name}\nPage (data-page): ${tp.name}\nSections to cover (in exact order):\n1. ${sec.title}\n\nNOTE: Generate content for this single section only.`;
   document.getElementById('uploadPageStatus').textContent = '';
   uploadPageModal.classList.add('open');
 }
@@ -614,32 +518,20 @@ document.getElementById('uploadPageFile').addEventListener('change', function() 
       const tp = getSelectedTopic(); if (!tp || !tp.sections) { status.textContent = '❌ No topic selected.'; status.style.color = '#ff7070'; return; }
       const sectionEls = doc.querySelectorAll('.lesson-section'); let filled = 0;
       if (aiTargetSection) {
-        // Single-section AI gen: match by data-title, fall back to first element
-        const secEl = Array.from(sectionEls).find(
-          el => (el.getAttribute('data-title') || '').trim().toLowerCase() === aiTargetSection.title.trim().toLowerCase()
-        ) || sectionEls[0];
+        const secEl = Array.from(sectionEls).find(el => (el.getAttribute('data-title')||'').trim().toLowerCase() === aiTargetSection.title.trim().toLowerCase()) || sectionEls[0];
         if (secEl) { aiTargetSection.content = secEl.innerHTML; filled = 1; }
         aiTargetSection = null;
       } else {
-        // Full-page upload: match each lesson-section to a topic section by data-title
         sectionEls.forEach(secEl => {
           const dt = secEl.getAttribute('data-title');
-          const sec = tp.sections.find(s => s.title.trim().toLowerCase() === (dt || '').trim().toLowerCase());
+          const sec = tp.sections.find(s => s.title.trim().toLowerCase() === (dt||'').trim().toLowerCase());
           if (sec) { sec.content = secEl.innerHTML; filled++; }
         });
-        // Fallback: positional matching if titles didn't align
-        if (filled === 0) {
-          sectionEls.forEach((secEl, i) => {
-            if (tp.sections[i]) { tp.sections[i].content = secEl.innerHTML; filled++; }
-          });
-        }
+        if (filled === 0) { sectionEls.forEach((secEl, i) => { if (tp.sections[i]) { tp.sections[i].content = secEl.innerHTML; filled++; } }); }
       }
       saveAll(); renderPage(); renderTree();
-      saveLibrary()
-        .then(() => showToast(`✓ Page content saved — ${filled} section(s) filled`))
-        .catch(() => showToast(`✓ Page saved locally — ${filled} section(s)`));
-      status.textContent = `✓ Filled ${filled} section(s).`;
-      status.style.color = '#90dba0';
+      saveLibrary().then(() => showToast(`✓ Page content saved — ${filled} section(s) filled`)).catch(() => showToast(`✓ Page saved locally — ${filled} section(s)`));
+      status.textContent = `✓ Filled ${filled} section(s).`; status.style.color = '#90dba0';
       uploadPageModal.classList.remove('open');
     } catch(err) { status.textContent = '❌ Error: ' + err.message; status.style.color = '#ff7070'; }
   };
@@ -688,14 +580,7 @@ document.getElementById('btn-redo').addEventListener('mousedown', e => { e.preve
 
 editor.addEventListener('click', e => { const a = e.target.closest('a'); if (a && a.href) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); } });
 
-// Highlight buttons
-//let activeHlType = null; // 'p', 'm', 'f', 'per', 'ins', or null
-
-// Highlight toolbar buttons are now built dynamically in index.html
-// setActiveHighlighter and auto-highlight listeners live in highlights.js
-// activeHlType is declared in highlights.js
- 
-// Wire up dynamically-rendered hl buttons after DOM ready
+// Wire HL buttons (FIX #3: ensure buttons are wired after dynamic injection)
 (function() {
   function _wireHlButtons() {
     (window.HL_CATEGORIES || []).forEach(cat => {
@@ -705,19 +590,17 @@ editor.addEventListener('click', e => { const a = e.target.closest('a'); if (a &
       }
     });
   }
-  // HL_CATEGORIES is available immediately (highlight-categories.js loads before editor.js)
   _wireHlButtons();
+  // Re-wire is handled by _injectHLButtons below (called after category changes)
 })();
-
 
 document.getElementById('exportPDFBtn').addEventListener('click', () => window.print());
 
-// ── Paste handler (images + tables) ──────────────────
+// ── Paste handler ──────────────────────────────────────
 function handleEditorPaste(e, editorEl, secObj) {
   const cd = e.clipboardData || window.clipboardData;
   if (!cd) return;
 
-  // ── Image paste ──────────────────────────────────────
   const items = Array.from(cd.items || []);
   const imgItem = items.find(it => it.type.startsWith('image/'));
   if (imgItem) {
@@ -726,79 +609,43 @@ function handleEditorPaste(e, editorEl, secObj) {
     const reader = new FileReader();
     reader.onload = ev => {
       const img = document.createElement('img');
-      img.src = ev.target.result;
-      img.style.maxWidth = '100%';
-      img.style.height = 'auto';
-      img.style.display = 'block';
-      img.style.margin = '0.5em 0';
-      img.style.borderRadius = '4px';
+      img.src = ev.target.result; img.style.maxWidth = '100%'; img.style.height = 'auto';
+      img.style.display = 'block'; img.style.margin = '0.5em 0'; img.style.borderRadius = '4px';
       const sel = window.getSelection();
       if (sel && sel.rangeCount) {
-        const range = sel.getRangeAt(0);
-        range.deleteContents();
-        range.insertNode(img);
-        range.setStartAfter(img);
-        range.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(range);
-      } else {
-        editorEl.appendChild(img);
-      }
+        const range = sel.getRangeAt(0); range.deleteContents(); range.insertNode(img);
+        range.setStartAfter(img); range.collapse(true); sel.removeAllRanges(); sel.addRange(range);
+      } else { editorEl.appendChild(img); }
       if (secObj) { secObj.content = editorEl.innerHTML; }
-      triggerAutosave();
-      updateWordCount();
-      setTimeout(updateHL, 80);
+      triggerAutosave(); updateWordCount(); setTimeout(updateHL, 80);
     };
     reader.readAsDataURL(blob);
     return;
   }
 
-  // ── HTML paste (tables, rich content) ───────────────
   const html = cd.getData('text/html');
   if (html) {
     e.preventDefault();
-    const tmp = document.createElement('div');
-    tmp.innerHTML = html;
-    // Sanitise: fix images so they don't overflow
-    tmp.querySelectorAll('img').forEach(img => {
-      img.style.maxWidth = '100%';
-      img.style.height = 'auto';
-      img.removeAttribute('width');
-      img.removeAttribute('height');
-    });
-    // Sanitise tables: make them scrollable-friendly
+    const tmp = document.createElement('div'); tmp.innerHTML = html;
+    tmp.querySelectorAll('img').forEach(img => { img.style.maxWidth = '100%'; img.style.height = 'auto'; img.removeAttribute('width'); img.removeAttribute('height'); });
     tmp.querySelectorAll('table').forEach(tbl => {
-      tbl.style.borderCollapse = 'collapse';
-      tbl.style.width = '100%';
-      tbl.style.fontSize = '13px';
-      tbl.querySelectorAll('td, th').forEach(cell => {
-        cell.style.border = '1px solid rgba(100,80,40,0.3)';
-        cell.style.padding = '4px 8px';
-        cell.style.wordBreak = 'break-word';
-      });
+      tbl.style.borderCollapse = 'collapse'; tbl.style.width = '100%'; tbl.style.fontSize = '13px';
+      tbl.querySelectorAll('td, th').forEach(cell => { cell.style.border = '1px solid rgba(100,80,40,0.3)'; cell.style.padding = '4px 8px'; cell.style.wordBreak = 'break-word'; });
     });
-    // Strip unwanted outer wrappers but keep content
     const frag = document.createDocumentFragment();
     while (tmp.firstChild) frag.appendChild(tmp.firstChild);
     const sel = window.getSelection();
     if (sel && sel.rangeCount) {
-      const range = sel.getRangeAt(0);
-      range.deleteContents();
-      range.insertNode(frag);
-      range.collapse(false);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    } else {
-      editorEl.appendChild(frag);
-    }
+      const range = sel.getRangeAt(0); range.deleteContents(); range.insertNode(frag);
+      range.collapse(false); sel.removeAllRanges(); sel.addRange(range);
+    } else { editorEl.appendChild(frag); }
     if (secObj) { secObj.content = editorEl.innerHTML; }
-    triggerAutosave();
-    updateWordCount();
-    setTimeout(updateHL, 80);
+    triggerAutosave(); updateWordCount(); setTimeout(updateHL, 80);
     return;
   }
 }
 
+// FIX #1: triggerAutosave uses module-level autosaveTimer (declared at top)
 function triggerAutosave() {
   clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(() => {
@@ -831,8 +678,7 @@ window.showToast = showToast;
 // ── Mark as Read ──────────────────────────────────────
 function toggleMarkRead() {
   const tp = getSelectedTopic(); if (!tp) return;
-  tp.isRead = !tp.isRead;
-  saveAll();
+  tp.isRead = !tp.isRead; saveAll();
   const markBtn = document.getElementById('markReadBtn');
   if (markBtn) {
     markBtn.textContent = tp.isRead ? '✓ Read' : '○ Read';
@@ -846,11 +692,8 @@ function toggleMarkRead() {
 window.toggleMarkRead = toggleMarkRead;
 
 // ── Custom Selection Menu ─────────────────────────────
-// Search modal logic lives in search-modal.js (LexicaSearch global).
 (function() {
   'use strict';
-
-  // ── Build selection menu DOM ──────────────────────────
   const selMenu = document.createElement('div');
   selMenu.id = 'custom-sel-menu';
   selMenu.innerHTML = `
@@ -862,10 +705,8 @@ window.toggleMarkRead = toggleMarkRead;
   document.body.appendChild(selMenu);
 
   function showSelMenu(x, y, text) {
-    selMenu.style.left = x + 'px';
-    selMenu.style.top  = y + 'px';
-    selMenu.classList.add('visible');
-    selMenu.dataset.text = text;
+    selMenu.style.left = x + 'px'; selMenu.style.top = y + 'px';
+    selMenu.classList.add('visible'); selMenu.dataset.text = text;
     requestAnimationFrame(() => {
       const r = selMenu.getBoundingClientRect();
       if (r.right  > window.innerWidth  - 8) selMenu.style.left = (window.innerWidth  - r.width  - 8) + 'px';
@@ -874,18 +715,16 @@ window.toggleMarkRead = toggleMarkRead;
   }
   function hideSelMenu() { selMenu.classList.remove('visible'); }
 
-  // ── Show on mouseup when no highlighter active ────────
   let _selTimer = null;
   document.addEventListener('mouseup', e => {
     if (activeHlType) return;
-    if (e.target.closest('#custom-sel-menu') || e.target.closest('#srm-overlay')) return;
+    if (e.target.closest('#custom-sel-menu') || e.target.closest('#srm-overlay') || e.target.closest('#hl-remove-btn')) return;
     clearTimeout(_selTimer);
     _selTimer = setTimeout(() => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || !sel.toString().trim()) { hideSelMenu(); return; }
       const text = sel.toString().trim();
       try { navigator.clipboard.writeText(text); } catch(er) {}
-      // Pass anchor to search modal module
       const range = sel.getRangeAt(0).cloneRange();
       if (window.LexicaSearch) window.LexicaSearch.setAnchor(range);
       const rect = sel.getRangeAt(0).getBoundingClientRect();
@@ -894,32 +733,52 @@ window.toggleMarkRead = toggleMarkRead;
   });
 
   document.addEventListener('mousedown', e => {
-    if (!e.target.closest('#custom-sel-menu') && !e.target.closest('#srm-overlay')) {
-      hideSelMenu();
-    }
+    if (!e.target.closest('#custom-sel-menu') && !e.target.closest('#srm-overlay')) hideSelMenu();
   });
 
-  // ── Menu button actions ───────────────────────────────
   selMenu.addEventListener('click', e => {
-    const btn = e.target.closest('button');
-    if (!btn) return;
-    const action = btn.dataset.action;
-    const text   = selMenu.dataset.text;
-    if (action === 'copy') {
-      navigator.clipboard.writeText(text).then(() => showToast('✓ Copied'));
-      hideSelMenu();
-    } else if (action === 'modal') {
-      hideSelMenu();
-      if (window.LexicaSearch) window.LexicaSearch.open(text);
-    } else if (action === 'newtab') {
-      window.open('https://www.bing.com/search?q=' + encodeURIComponent(text), '_blank', 'noopener');
-      hideSelMenu();
-    } else if (action === 'ai') {
-      showToast('AI feature coming soon');
-      hideSelMenu();
-    }
+    const btn = e.target.closest('button'); if (!btn) return;
+    const action = btn.dataset.action; const text = selMenu.dataset.text;
+    if (action === 'copy') { navigator.clipboard.writeText(text).then(() => showToast('✓ Copied')); hideSelMenu(); }
+    else if (action === 'modal') { hideSelMenu(); if (window.LexicaSearch) window.LexicaSearch.open(text); }
+    else if (action === 'newtab') { window.open('https://www.bing.com/search?q=' + encodeURIComponent(text), '_blank', 'noopener'); hideSelMenu(); }
+    else if (action === 'ai') { showToast('AI feature coming soon'); hideSelMenu(); }
   });
 })();
+
+// ── Inject HL toolbar + right panel (called on init and on category change) ──
+window._injectHLButtons = function() {
+  const container = document.getElementById('hl-toolbar-buttons');
+  if (!container || !window.HL_CATEGORIES) return;
+  container.innerHTML = '';
+  window.HL_CATEGORIES.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.className = 'eo-hl'; btn.id = 'hl-btn-' + cat.key; btn.title = cat.label;
+    btn.style.background = cat.color; btn.style.color = '#000';
+    btn.style.fontSize = '9px'; btn.style.padding = '3px 7px';
+    btn.textContent = '✦ ' + cat.label;
+    btn.addEventListener('click', e => { e.preventDefault(); setActiveHighlighter(cat.key); });
+    container.appendChild(btn);
+  });
+};
+
+window._injectRightPanelCategories = function() {
+  const panel = document.getElementById('hl-panel-categories');
+  if (!panel || !window.HL_CATEGORIES) return;
+  panel.innerHTML = '';
+  window.HL_CATEGORIES.forEach((cat, i) => {
+    const label = document.createElement('div');
+    label.className = 'rp-section-label';
+    label.style.marginTop = i === 0 ? '0' : '14px';
+    label.style.color = cat.color;
+    label.textContent = '✦ ' + cat.label;
+    panel.appendChild(label);
+    const list = document.createElement('div');
+    list.id = 'hl-list-' + cat.key;
+    list.innerHTML = `<div class="hl-empty">No ${escHtml(cat.label)} highlights yet</div>`;
+    panel.appendChild(list);
+  });
+};
 
 // ── Init ──────────────────────────────────────────────
 renderTree(); renderPage(); updateHL();

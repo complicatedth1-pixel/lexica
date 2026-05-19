@@ -148,7 +148,8 @@ async function loadPdfFromStorage(bookId) {
 function saveAll() {
   // GUARD: never write editor defaults back to DB before library is loaded from Supabase.
   if (!window._libraryLoaded) return;
-
+  // FIX #2: Sync window globals → local vars in case editor.js hasn't run yet
+  if (typeof treeData === 'undefined') return;
   if (window.activeBookId) {
     const book = window.library.find(b => b.id === window.activeBookId);
     // FIX: Never overwrite a PDF viewer book's metadata from editor globals.
@@ -174,12 +175,14 @@ function saveAll() {
 }
 
 function loadBookIntoEditor(book) {
-  treeData = book.treeData || [];
-  bookName = book.name || 'My Book';
-  highlights = book.highlights || {};
-  notes = book.notes || {};
-  selectedChapterId = null;
-  selectedTopicId = null;
+  // FIX #2: These globals are declared in editor.js which loads after library.js.
+  // Use window assignments so they work regardless of load order.
+  window.treeData = treeData = book.treeData || [];
+  window.bookName = bookName = book.name || 'My Book';
+  window.highlights = highlights = book.highlights || {};
+  window.notes = notes = book.notes || {};
+  window.selectedChapterId = selectedChapterId = null;
+  window.selectedTopicId = selectedTopicId = null;
 }
 
 // ── Homepage render ───────────────────────────────────

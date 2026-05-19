@@ -308,6 +308,9 @@
       <div class="rp-body">
         <!-- Upload / Export actions -->
         <div class="rp-section-label" style="margin-bottom:8px;">⬆ Import / Export</div>
+        <!-- Highlight category manager -->
+<div class="rp-section-label" style="margin-top:14px;margin-bottom:6px;">✦ Highlight Settings</div>
+<button onclick="openCategoryManager()" style="width:100%;background:rgba(232,121,249,0.1);border:1px solid rgba(232,121,249,0.25);color:#e879f9;font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;padding:8px 10px;border-radius:4px;cursor:pointer;text-align:left;margin-bottom:4px;">⚙ Manage Categories</button>
         <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:18px;">
           <button id="uploadPageBtn" style="width:100%;background:rgba(160,130,220,0.1);border:1px solid rgba(160,130,220,0.3);color:#c8b8e8;font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;padding:8px 10px;border-radius:4px;cursor:pointer;text-align:left;">⬆ Upload Section</button>
           <button id="exportPDFBtn" style="width:100%;background:rgba(212,135,42,0.1);border:1px solid rgba(212,135,42,0.25);color:#d4a060;font-family:'Outfit',sans-serif;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;padding:8px 10px;border-radius:4px;cursor:pointer;text-align:left;">🖨 Export PDF</button>
@@ -440,8 +443,8 @@
 <script src="editor.js"></script>
 
 <script>
-// Inject HL buttons into topbar dynamically from HL_CATEGORIES
-// Also inject right panel categories
+// Inject HL buttons and right panel — driven by HL_CATEGORIES (from highlight-categories.js)
+// These are also re-called by editor.js via window._injectHLButtons / _injectRightPanelCategories
 (function() {
   function injectHLButtons() {
     const container = document.getElementById('hl-toolbar-buttons');
@@ -472,13 +475,16 @@
       label.style.color = cat.color;
       label.textContent = '✦ ' + cat.label;
       panel.appendChild(label);
-
       const list = document.createElement('div');
       list.id = 'hl-list-' + cat.key;
       list.innerHTML = `<div class="hl-empty">No ${cat.label} highlights yet</div>`;
       panel.appendChild(list);
     });
   }
+
+  // Store refs so editor.js can re-call them after category changes
+  window._injectHLButtons = injectHLButtons;
+  window._injectRightPanelCategories = injectRightPanelCategories;
 
   injectHLButtons();
   injectRightPanelCategories();
