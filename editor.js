@@ -950,4 +950,4 @@ window.toggleMarkRead = toggleMarkRead;
 })();
 
 // ── Init ──────────────────────────────────────────────
-renderTree(); renderPage(); renderHomepage(); updateHL();
+renderTree(); renderPage(); updateHL();

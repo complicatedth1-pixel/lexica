@@ -8,6 +8,25 @@ window.library = [];
 window.activeBookId = null;
 window._libraryLoaded = false; // GUARD: saveAll() blocks until this is true
 
+// ── FIX: Tab-visibility guard ─────────────────────────
+// When the user switches back to this tab, re-fetch from Supabase before
+// allowing any writes. This prevents a stale tab from overwriting fresher data
+// saved by another tab or device.
+window._tabFocusedAt = Date.now();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    const awayMs = Date.now() - window._tabFocusedAt;
+    // Only re-sync if the tab was hidden for more than 30 seconds
+    if (awayMs > 30000 && currentUser) {
+      window._libraryLoaded = false; // block writes during reload
+      loadLibraryFromSupabase();
+    }
+    window._tabFocusedAt = Date.now();
+  } else {
+    window._tabFocusedAt = Date.now();
+  }
+});
+
 // ── Helpers ──────────────────────────────────────────
 function uid() { return '_' + Math.random().toString(36).slice(2, 9); }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -40,6 +59,9 @@ function bookCoverGradient(name) {
 // ── Supabase CRUD ─────────────────────────────────────
 async function saveBook(book) {
   if (!currentUser || !book) return;
+  // FIX: Never save a book whose treeData is the editor default (empty array)
+  // while the real library data hasn't been loaded yet.
+  if (!window._libraryLoaded) return;
   const row = {
     id: book.id, user_id: currentUser.id, name: book.name || '',
     tree_data: book.treeData || [], highlights: book.highlights || {},
@@ -54,14 +76,19 @@ async function saveBook(book) {
 
 async function saveLibrary() {
   if (!currentUser) return;
+  if (!window._libraryLoaded) return; // FIX: never flush before load
   for (const book of window.library) { await saveBook(book); }
   try { localStorage.setItem('folio-activeBook', window.activeBookId || ''); } catch(e){}
 }
 
 async function deleteBookFromDB(bookId) {
   if (!currentUser) return;
-  await sb.from('books').delete().eq('id', bookId).eq('user_id', currentUser.id);
-  await sb.storage.from('pdfs').remove([`${currentUser.id}/${bookId}`]);
+  // FIX: Run delete operations in parallel but await both, so a racing upsert
+  // can't resurrect the book before the delete completes.
+  await Promise.all([
+    sb.from('books').delete().eq('id', bookId).eq('user_id', currentUser.id),
+    sb.storage.from('pdfs').remove([`${currentUser.id}/${bookId}`])
+  ]);
 }
 
 async function loadLibraryFromSupabase() {
@@ -81,6 +108,18 @@ async function loadLibraryFromSupabase() {
     }));
   }
   try { window.activeBookId = localStorage.getItem('folio-activeBook') || null; } catch(e){}
+
+  // FIX: If the editor was already open on a book (e.g. user refreshed while editing),
+  // reload that book's data from the freshly-fetched library into the editor globals
+  // BEFORE setting _libraryLoaded = true. This prevents the stale editor state
+  // (treeData=[], bookName='My Book') from being written back by any pending saveAll().
+  if (window.activeBookId) {
+    const activeBook = window.library.find(b => b.id === window.activeBookId);
+    if (activeBook && !activeBook.isPDFViewer && typeof loadBookIntoEditor === 'function') {
+      loadBookIntoEditor(activeBook);
+    }
+  }
+
   window._libraryLoaded = true; // GUARD: data is now safe to write back
   renderHomepage();
 }
@@ -108,14 +147,22 @@ async function loadPdfFromStorage(bookId) {
 // ── In-memory sync ────────────────────────────────────
 function saveAll() {
   // GUARD: never write editor defaults back to DB before library is loaded from Supabase.
-  // Without this, the editor globals (treeData=[], bookName='My Book') get flushed to
-  // the active book on every page load, wiping real content before it's fetched.
   if (!window._libraryLoaded) return;
 
   if (window.activeBookId) {
     const book = window.library.find(b => b.id === window.activeBookId);
     // FIX: Never overwrite a PDF viewer book's metadata from editor globals.
     if (book && !book.isPDFViewer) {
+      // FIX: Sanity-check that treeData is actually this book's data before writing.
+      // If treeData is empty but the book has real content, this is a stale-state
+      // overwrite — skip it to protect existing content.
+      const editorHasData = Array.isArray(treeData) && treeData.length > 0;
+      const bookHasData = Array.isArray(book.treeData) && book.treeData.length > 0;
+      if (bookHasData && !editorHasData) {
+        // The editor is empty but the book has real content — do NOT overwrite.
+        console.warn('[saveAll] Skipped: editor treeData is empty but book has content. Possible stale state.');
+        return;
+      }
       book.treeData = treeData;   // treeData is owned by editor.js
       book.name = bookName;
       book.highlights = highlights;
