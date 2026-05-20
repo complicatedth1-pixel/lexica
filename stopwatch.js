@@ -1,9 +1,6 @@
 // stopwatch.js — Timer state, topic time tracking, PDF page time
 // Per-TOPIC tracking: time is accumulated directly on tp.timeSpent (ms).
-// pageTimes is no longer used for regular topics; only PDFs still use pageTimes.
 // Owns: swElapsed, swStart, swTimer, swRunning, swSessionElapsed
-// Reads: treeData, selectedChapterId, selectedTopicId (from editor.js)
-// Reads: pdfMode, pdfViewerBook, pdfCurrentPage (from pdf.js)
 
 'use strict';
 
@@ -17,7 +14,6 @@ function swFormat(ms) {
   return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
 }
 
-// Return total time for a topic — now simply tp.timeSpent
 function getTopicTotalTime(tp) {
   if (!tp) return 0;
   return tp.timeSpent || 0;
@@ -54,7 +50,6 @@ document.getElementById('swReset').addEventListener('click', () => {
   }
 });
 
-// Save elapsed session time to the current topic directly
 function saveCurrentTopicTime() {
   const tp = getSelectedTopic(); if (!tp) return;
   let sessionTime = swSessionElapsed;
@@ -67,12 +62,9 @@ function saveCurrentTopicTime() {
   saveAll();
 }
 
-// Alias used externally (called by editor.js etc.)
 function saveStopwatchToTopic() {
   if (!pdfMode) saveCurrentTopicTime();
 }
-
-// ── No a4pagechange listener needed — time is per topic, not per visual page ──
 
 function savePDFPageTime() {
   if (!pdfMode || !pdfViewerBook || pdfCurrentPage === null) return;
@@ -95,7 +87,7 @@ function computeTopicWordCount(tp) {
   return text ? text.split(/\s+/).filter(Boolean).length : 0;
 }
 
-// Save time when switching topics
+// ── Save time when switching topics ──────────────────
 document.getElementById('chapterList').addEventListener('click', e => {
   const topicName = e.target.closest('.topic-name');
   if (topicName) {
@@ -107,7 +99,6 @@ document.getElementById('chapterList').addEventListener('click', e => {
       swStartStop.textContent = '▶'; swDisplay.classList.remove('running');
       swElapsed = 0; swDisplay.textContent = '00:00';
       setTimeout(() => {
-        // Find the newly selected topic and load its accumulated time
         let found = null;
         for (const ch of (treeData || [])) {
           const t = (ch.topics||[]).find(t => t.id === tid);
@@ -122,7 +113,7 @@ document.getElementById('chapterList').addEventListener('click', e => {
   }
 }, true);
 
-// Save time when going home
+// ── Save time when going home ─────────────────────────
 document.getElementById('homeLink').addEventListener('click', () => {
   if (!pdfMode) {
     if (swRunning && swStart) {
@@ -136,6 +127,66 @@ document.getElementById('homeLink').addEventListener('click', () => {
     swStartStop.textContent = '▶'; swDisplay.textContent = '00:00'; swDisplay.classList.remove('running');
   }
 }, true);
+
+// ── Save time when closing/refreshing tab ─────────────
+// Uses sendBeacon for reliable delivery even during page unload.
+// Falls back to synchronous saveAll() which at least updates in-memory state.
+window.addEventListener('beforeunload', () => {
+  if (!swRunning && swSessionElapsed <= 0) return; // nothing to save
+
+  // Accumulate any running time into session elapsed
+  if (swRunning && swStart) {
+    const elapsed = Date.now() - swStart;
+    swElapsed += elapsed;
+    swSessionElapsed += elapsed;
+    swStart = null;
+    swRunning = false;
+    clearInterval(swTimer);
+  }
+
+  if (pdfMode && pdfCurrentPage !== null) {
+    // For PDF mode — update in-memory then let saveAll flush it
+    if (pdfViewerBook) {
+      if (!pdfViewerBook.pageTimes) pdfViewerBook.pageTimes = {};
+      pdfViewerBook.pageTimes[pdfCurrentPage] = (pdfViewerBook.pageTimes[pdfCurrentPage] || 0) + swElapsed;
+    }
+  } else {
+    // For topic mode — update tp.timeSpent directly in memory
+    const tp = getSelectedTopic();
+    if (tp && swSessionElapsed > 0) {
+      tp.timeSpent = (tp.timeSpent || 0) + swSessionElapsed;
+      swSessionElapsed = 0;
+      tp.wordCount = computeTopicWordCount(tp);
+    }
+  }
+
+  // Sync in-memory book state to library object
+  saveAll();
+
+  // Best-effort: send the updated book to Supabase via beacon
+  // (fetch/XHR are not guaranteed to complete on unload, but sendBeacon is)
+  if (currentUser && window.activeBookId && window._libraryLoaded) {
+    const book = window.library.find(b => b.id === window.activeBookId);
+    if (book) {
+      const row = {
+        id: book.id, user_id: currentUser.id, name: book.name || '',
+        tree_data: book.treeData || [], highlights: book.highlights || {},
+        notes: book.notes || {}, last_opened: Date.now(),
+        is_pdf: book.isPDF || false, is_pdf_viewer: book.isPDFViewer || false,
+        pdf_num_pages: book.pdfNumPages || null, page_times: book.pageTimes || {},
+        pdf_highlights: book.pdfHighlights || {},
+        page_confirmed: book.pageConfirmed || {}
+      };
+      // Supabase REST endpoint — sendBeacon fires reliably on tab close
+      const url = `${window._supabase?.supabaseUrl || 'https://ckrtzfyqkcgnsbueetqh.supabase.co'}/rest/v1/books`;
+      try {
+        navigator.sendBeacon(url + '?on_conflict=id,user_id',
+          new Blob([JSON.stringify(row)], { type: 'application/json' })
+        );
+      } catch(e) {}
+    }
+  }
+});
 
 window.swFormat = swFormat;
 window.saveStopwatchToTopic = saveStopwatchToTopic;

@@ -22,7 +22,6 @@ let selectedChapterId = null, selectedTopicId = null;
 let dragSrc = null, secDragSrc = null;
 let _savedRange = null;
 
-// FIX #1: Declare autosaveTimer at module scope so triggerAutosave never throws ReferenceError
 let autosaveTimer = null;
 
 // ── Helpers ──────────────────────────────────────────
@@ -228,6 +227,18 @@ function injectChapterProgress() {
 }
 new MutationObserver(injectChapterProgress).observe(document.getElementById('chapterList'), { childList:true, subtree:false });
 
+// ── Live lookup helper — always get fresh sec ref from treeData ──
+function _getLiveSec(sid) {
+  for (const ch of treeData) {
+    for (const tp of (ch.topics || [])) {
+      for (const s of (tp.sections || [])) {
+        if (s.id === sid) return s;
+      }
+    }
+  }
+  return null;
+}
+
 // ── Page / Section renderer ───────────────────────────
 function renderPage() {
   _savedRange = null;
@@ -381,26 +392,31 @@ function renderPage() {
       secBody.classList.toggle('collapsed', sec.open === false);
     });
 
-    // FIX #3: Manual highlighting — ensure mouseup on section editor captures selection
-    // and also triggers applyPreciseHighlight when a highlighter is active.
-    // We do NOT fire highlight here (the global mouseup listener in highlights.js handles it).
-    // We only ensure captureSel is called reliably.
     secEditor.addEventListener('touchend', () => { setTimeout(() => captureSel(), 50); });
     secEditor.addEventListener('mouseup', () => captureSel());
     secEditor.addEventListener('keyup', () => captureSel());
 
+    // ── FIXED: Single consolidated input listener that always syncs content ──
     secEditor.addEventListener('input', () => {
+      // Always do a live lookup by sid so stale closure references never lose data
+      const liveSec = _getLiveSec(secEditor.dataset.sid);
+      if (liveSec) liveSec.content = secEditor.innerHTML;
+      // Also update closure ref as fallback
       sec.content = secEditor.innerHTML;
+
       const hasC = secEditor.textContent.trim().length > 0;
       secHeader.querySelector('.section-status').textContent = hasC ? 'Has content' : 'Empty';
       secHeader.querySelector('.section-status').className = 'section-status' + (hasC ? ' has-content' : '');
       const aiBtn2 = secBody.querySelector('.ai-gen-btn'); if (aiBtn2 && hasC) aiBtn2.remove();
-      triggerAutosave(); updateWordCount();
+
+      triggerAutosave();
+      updateWordCount();
+      setTimeout(updateHL, 80);
+      requestAnimationFrame(updatePageRulers);
     });
+
     secEditor.addEventListener('click', e => { const a = e.target.closest('a'); if (a && a.href) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); } });
-    secEditor.addEventListener('input', () => setTimeout(updateHL, 80));
     secEditor.addEventListener('paste', e => handleEditorPaste(e, secEditor, sec));
-    secEditor.addEventListener('input', () => { requestAnimationFrame(updatePageRulers); });
   });
 
   requestAnimationFrame(() => { updatePageRulers(); updateCurrentPageBadge(); });
@@ -412,7 +428,6 @@ function renderPage() {
   }
 
   updateWordCount();
-  // Re-stamp highlight classes from data-hl-cat on pre-filled content
   setTimeout(initGroupHighlightsFromHTML, 80);
 }
 
@@ -581,11 +596,7 @@ document.getElementById('btn-link').addEventListener('mousedown', e => { e.preve
 document.getElementById('btn-undo').addEventListener('mousedown', e => { e.preventDefault(); document.execCommand('undo'); setTimeout(updateHL, 60); });
 document.getElementById('btn-redo').addEventListener('mousedown', e => { e.preventDefault(); document.execCommand('redo'); setTimeout(updateHL, 60); });
 
-
-
 editor.addEventListener('click', e => { const a = e.target.closest('a'); if (a && a.href) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); } });
-
-
 
 document.getElementById('exportPDFBtn').addEventListener('click', () => window.print());
 
@@ -600,21 +611,23 @@ function handleEditorPaste(e, editorEl, secObj) {
     e.preventDefault();
     const blob = imgItem.getAsFile();
     const reader = new FileReader();
-reader.onload = ev => {
-  const img = document.createElement('img');
-  img.src = ev.target.result; img.style.maxWidth = '100%'; img.style.height = 'auto';
-  img.style.display = 'block'; img.style.margin = '0.5em 0'; img.style.borderRadius = '4px';
-  const sel = window.getSelection();
-  if (sel && sel.rangeCount) {
-    const range = sel.getRangeAt(0); range.deleteContents(); range.insertNode(img);
-    range.setStartAfter(img); range.collapse(true); sel.removeAllRanges(); sel.addRange(range);
-  } else { editorEl.appendChild(img); }
-  // FIX: wait for DOM to update before reading innerHTML back into sec.content
-  requestAnimationFrame(() => {
-    if (secObj) { secObj.content = editorEl.innerHTML; }
-    triggerAutosave(); updateWordCount(); setTimeout(updateHL, 80);
-  });
-};
+    reader.onload = ev => {
+      const img = document.createElement('img');
+      img.src = ev.target.result; img.style.maxWidth = '100%'; img.style.height = 'auto';
+      img.style.display = 'block'; img.style.margin = '0.5em 0'; img.style.borderRadius = '4px';
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        const range = sel.getRangeAt(0); range.deleteContents(); range.insertNode(img);
+        range.setStartAfter(img); range.collapse(true); sel.removeAllRanges(); sel.addRange(range);
+      } else { editorEl.appendChild(img); }
+      // FIX: wait for DOM to update before reading innerHTML back
+      requestAnimationFrame(() => {
+        const liveSec = _getLiveSec(editorEl.dataset.sid);
+        if (liveSec) liveSec.content = editorEl.innerHTML;
+        if (secObj) secObj.content = editorEl.innerHTML;
+        triggerAutosave(); updateWordCount(); setTimeout(updateHL, 80);
+      });
+    };
     reader.readAsDataURL(blob);
     return;
   }
@@ -635,13 +648,17 @@ reader.onload = ev => {
       const range = sel.getRangeAt(0); range.deleteContents(); range.insertNode(frag);
       range.collapse(false); sel.removeAllRanges(); sel.addRange(range);
     } else { editorEl.appendChild(frag); }
-    if (secObj) { secObj.content = editorEl.innerHTML; }
-    triggerAutosave(); updateWordCount(); setTimeout(updateHL, 80);
+    requestAnimationFrame(() => {
+      const liveSec = _getLiveSec(editorEl.dataset.sid);
+      if (liveSec) liveSec.content = editorEl.innerHTML;
+      if (secObj) secObj.content = editorEl.innerHTML;
+      triggerAutosave(); updateWordCount(); setTimeout(updateHL, 80);
+    });
     return;
   }
 }
 
-// FIX #1: triggerAutosave uses module-level autosaveTimer (declared at top)
+// ── Autosave ──────────────────────────────────────────
 function triggerAutosave() {
   clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(() => {
@@ -742,7 +759,7 @@ window.toggleMarkRead = toggleMarkRead;
   });
 })();
 
-// ── Inject HL toolbar + right panel (called on init and on category change) ──
+// ── Inject HL toolbar + right panel ──────────────────
 window._injectHLButtons = function() {
   const container = document.getElementById('hl-toolbar-buttons');
   if (!container || !window.HL_CATEGORIES) return;
@@ -782,6 +799,7 @@ window._injectRightPanelCategories = function() {
     panel.appendChild(list);
   });
 };
+
 // ── Topbar drag-to-scroll ─────────────────────────────
 (function() {
   const bar = document.querySelector('.topbar');
@@ -801,5 +819,6 @@ window._injectRightPanelCategories = function() {
     bar.scrollLeft = scrollLeft - (e.pageX - bar.offsetLeft - startX);
   });
 })();
+
 // ── Init ──────────────────────────────────────────────
 renderTree(); renderPage(); updateHL();
