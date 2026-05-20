@@ -600,18 +600,21 @@ function handleEditorPaste(e, editorEl, secObj) {
     e.preventDefault();
     const blob = imgItem.getAsFile();
     const reader = new FileReader();
-    reader.onload = ev => {
-      const img = document.createElement('img');
-      img.src = ev.target.result; img.style.maxWidth = '100%'; img.style.height = 'auto';
-      img.style.display = 'block'; img.style.margin = '0.5em 0'; img.style.borderRadius = '4px';
-      const sel = window.getSelection();
-      if (sel && sel.rangeCount) {
-        const range = sel.getRangeAt(0); range.deleteContents(); range.insertNode(img);
-        range.setStartAfter(img); range.collapse(true); sel.removeAllRanges(); sel.addRange(range);
-      } else { editorEl.appendChild(img); }
-      if (secObj) { secObj.content = editorEl.innerHTML; }
-      triggerAutosave(); updateWordCount(); setTimeout(updateHL, 80);
-    };
+reader.onload = ev => {
+  const img = document.createElement('img');
+  img.src = ev.target.result; img.style.maxWidth = '100%'; img.style.height = 'auto';
+  img.style.display = 'block'; img.style.margin = '0.5em 0'; img.style.borderRadius = '4px';
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount) {
+    const range = sel.getRangeAt(0); range.deleteContents(); range.insertNode(img);
+    range.setStartAfter(img); range.collapse(true); sel.removeAllRanges(); sel.addRange(range);
+  } else { editorEl.appendChild(img); }
+  // FIX: wait for DOM to update before reading innerHTML back into sec.content
+  requestAnimationFrame(() => {
+    if (secObj) { secObj.content = editorEl.innerHTML; }
+    triggerAutosave(); updateWordCount(); setTimeout(updateHL, 80);
+  });
+};
     reader.readAsDataURL(blob);
     return;
   }
