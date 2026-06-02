@@ -661,11 +661,14 @@ function handleEditorPaste(e, editorEl, secObj) {
 // ── Autosave ──────────────────────────────────────────
 function triggerAutosave() {
   clearTimeout(autosaveTimer);
-  autosaveTimer = setTimeout(() => {
-    saveAll();
-    const ind = document.getElementById('autosaveIndicator'); ind.classList.add('visible');
-    setTimeout(() => ind.classList.remove('visible'), 1500);
-  }, 1500);
+// FIX: Reduced debounce from 1500ms → 400ms so a quick refresh after
+// typing doesn't outrun the save. The beforeunload beacon handles true
+// instant-close, but 400ms catches the common case of refresh-after-pause.
+autosaveTimer = setTimeout(() => {
+  saveAll();
+  const ind = document.getElementById('autosaveIndicator'); ind.classList.add('visible');
+  setTimeout(() => ind.classList.remove('visible'), 1500);
+}, 400);
 }
 document.getElementById('editor').addEventListener('input', () => { triggerAutosave(); updateWordCount(); });
 document.getElementById('editor').addEventListener('paste', e => handleEditorPaste(e, document.getElementById('editor'), null));

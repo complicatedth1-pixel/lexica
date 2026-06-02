@@ -128,13 +128,14 @@ document.getElementById('homeLink').addEventListener('click', () => {
   }
 }, true);
 
-// ── Save time when closing/refreshing tab ─────────────
-// Uses sendBeacon for reliable delivery even during page unload.
-// Falls back to synchronous saveAll() which at least updates in-memory state.
+// ── Save on refresh / tab close (beforeunload) ────────
+// FIX: The previous version used sendBeacon without auth headers, which
+// Supabase REST rejects with 401 → silent data loss on every refresh.
+// Fix: include apikey + Authorization headers via fetch with keepalive:true.
+// keepalive:true is the modern equivalent of sendBeacon for JSON APIs —
+// the browser guarantees it completes even if the page is unloading.
 window.addEventListener('beforeunload', () => {
-  if (!swRunning && swSessionElapsed <= 0) return; // nothing to save
-
-  // Accumulate any running time into session elapsed
+  // Step 1: flush any running stopwatch time into in-memory treeData
   if (swRunning && swStart) {
     const elapsed = Date.now() - swStart;
     swElapsed += elapsed;
@@ -145,13 +146,11 @@ window.addEventListener('beforeunload', () => {
   }
 
   if (pdfMode && pdfCurrentPage !== null) {
-    // For PDF mode — update in-memory then let saveAll flush it
     if (pdfViewerBook) {
       if (!pdfViewerBook.pageTimes) pdfViewerBook.pageTimes = {};
       pdfViewerBook.pageTimes[pdfCurrentPage] = (pdfViewerBook.pageTimes[pdfCurrentPage] || 0) + swElapsed;
     }
   } else {
-    // For topic mode — update tp.timeSpent directly in memory
     const tp = getSelectedTopic();
     if (tp && swSessionElapsed > 0) {
       tp.timeSpent = (tp.timeSpent || 0) + swSessionElapsed;
@@ -160,30 +159,66 @@ window.addEventListener('beforeunload', () => {
     }
   }
 
-  // Sync in-memory book state to library object
-  saveAll();
+  // Step 2: sync editor DOM → window.library in-memory object
+  // FIX: also force-flush the autosave debounce — if the user typed and
+  // refreshed within 1500ms, saveAll() was never called yet. We call it
+  // here directly so the in-memory book object has the latest treeData
+  // before we serialize it to JSON for the beacon.
+  if (typeof saveAll === 'function') saveAll();
 
-  // Best-effort: send the updated book to Supabase via beacon
-  // (fetch/XHR are not guaranteed to complete on unload, but sendBeacon is)
-  if (currentUser && window.activeBookId && window._libraryLoaded) {
-    const book = window.library.find(b => b.id === window.activeBookId);
-    if (book) {
+  // Step 3: fire a keepalive fetch to Supabase REST (replaces broken sendBeacon)
+  // FIX: sendBeacon sends no custom headers — Supabase requires apikey and
+  // Authorization. fetch with keepalive:true is guaranteed by spec to
+  // complete after page unload and supports full headers.
+  const user = window.currentUser;
+  const token = window._supabaseAccessToken;
+  const SUPABASE_URL = 'https://ckrtzfyqkcgnsbueetqh.supabase.co';
+  const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrcnR6Znlxa2NnbnNidWVldHFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0MDk4NjEsImV4cCI6MjA5Mzk4NTg2MX0.S7bRBw6jJtTHxiTgFxL_45kIeV1Q4EotKd2MFviOMac';
+
+  if (user && window.activeBookId && window._libraryLoaded) {
+    const book = window.library && window.library.find(b => b.id === window.activeBookId);
+    if (book && !book.isPDFViewer) {
       const row = {
-        id: book.id, user_id: currentUser.id, name: book.name || '',
-        tree_data: book.treeData || [], highlights: book.highlights || {},
-        notes: book.notes || {}, last_opened: Date.now(),
-        is_pdf: book.isPDF || false, is_pdf_viewer: book.isPDFViewer || false,
-        pdf_num_pages: book.pdfNumPages || null, page_times: book.pageTimes || {},
+        id: book.id,
+        user_id: user.id,
+        name: book.name || '',
+        tree_data: book.treeData || [],
+        highlights: book.highlights || {},
+        notes: book.notes || {},
+        last_opened: Date.now(),
+        is_pdf: book.isPDF || false,
+        is_pdf_viewer: book.isPDFViewer || false,
+        pdf_num_pages: book.pdfNumPages || null,
+        page_times: book.pageTimes || {},
         pdf_highlights: book.pdfHighlights || {},
         page_confirmed: book.pageConfirmed || {}
       };
-      // Supabase REST endpoint — sendBeacon fires reliably on tab close
-      const url = `${window._supabase?.supabaseUrl || 'https://ckrtzfyqkcgnsbueetqh.supabase.co'}/rest/v1/books`;
       try {
-        navigator.sendBeacon(url + '?on_conflict=id,user_id',
-          new Blob([JSON.stringify(row)], { type: 'application/json' })
+        // keepalive:true — browser completes this request even after page unload
+        fetch(
+          `${SUPABASE_URL}/rest/v1/books?on_conflict=id,user_id`,
+          {
+            method: 'POST',
+            keepalive: true,
+            headers: {
+              'Content-Type': 'application/json',
+              'Prefer': 'resolution=merge-duplicates',
+              'apikey': SUPABASE_ANON,
+              'Authorization': `Bearer ${token || SUPABASE_ANON}`
+            },
+            body: JSON.stringify(row)
+          }
         );
-      } catch(e) {}
+      } catch(e) {
+        // last-resort: try sendBeacon with the anon key in a custom header blob
+        // (some browsers block keepalive fetch on unload; beacon is a fallback)
+        try {
+          navigator.sendBeacon(
+            `${SUPABASE_URL}/rest/v1/books?on_conflict=id,user_id&apikey=${SUPABASE_ANON}`,
+            new Blob([JSON.stringify(row)], { type: 'application/json' })
+          );
+        } catch(e2) {}
+      }
     }
   }
 });
