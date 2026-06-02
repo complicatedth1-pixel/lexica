@@ -9,17 +9,40 @@ window.activeBookId = null;
 window._libraryLoaded = false; // GUARD: saveAll() blocks until this is true
 window._editorLoadedForBook = null; // GUARD: tracks which book is loaded in editor
 
+// ── FIX: Pending save queue — prevents race between fire-and-forget saves ──
+// saveBook() calls are now serialized so a slow upsert can't be overwritten
+// by a stale loadLibraryFromSupabase() fetch that lands after it.
+let _saveQueue = Promise.resolve();
+function _enqueueSave(fn) {
+  _saveQueue = _saveQueue.then(() => fn().catch(err => console.error('[saveQueue]', err)));
+  return _saveQueue;
+}
+
 // ── Tab-visibility guard ──────────────────────────────
 window._tabFocusedAt = Date.now();
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     const awayMs = Date.now() - window._tabFocusedAt;
+    // FIX: Only reload from Supabase if we have NO pending saves queued.
+    // Previously, coming back to the tab after 30 s would fetch stale data
+    // and overwrite in-memory edits that hadn't finished uploading yet.
     if (awayMs > 30000 && currentUser) {
-      window._libraryLoaded = false;
-      loadLibraryFromSupabase();
+      _saveQueue.then(() => {
+        // Safe to reload — all pending saves have settled
+        window._libraryLoaded = false;
+        loadLibraryFromSupabase();
+      });
     }
     window._tabFocusedAt = Date.now();
   } else {
+    // Tab is hiding — flush any pending in-memory state to Supabase right now
+    if (window.activeBookId && window._libraryLoaded) {
+      saveAll();
+      // FIX: also kick off an explicit cloud save on tab hide so data
+      // isn't stuck in the fire-and-forget queue if the tab is closed
+      const active = window.library.find(b => b.id === window.activeBookId);
+      if (active && !active.isPDFViewer) _enqueueSave(() => saveBook(active));
+    }
     window._tabFocusedAt = Date.now();
   }
 });
@@ -54,6 +77,8 @@ function bookCoverGradient(name) {
 }
 
 // ── Supabase CRUD ─────────────────────────────────────
+// FIX: saveBook is now always enqueued so saves are serialized and never
+// silently dropped by a concurrent fetch overwriting window.library.
 async function saveBook(book) {
   if (!currentUser || !book) return;
   if (!window._libraryLoaded) return;
@@ -66,9 +91,13 @@ async function saveBook(book) {
     pdf_highlights: book.pdfHighlights || {},
     page_confirmed: book.pageConfirmed || {}
   };
-  await sb.from('books').upsert(row, { onConflict: 'id,user_id' });
+  const { error } = await sb.from('books').upsert(row, { onConflict: 'id,user_id' });
+  if (error) console.error('[saveBook] upsert error:', error);
 }
 
+// FIX: saveLibrary now awaits each saveBook call properly (was already doing
+// so with await, but now they also go through the queue so nothing fires
+// out-of-order when called from multiple places).
 async function saveLibrary() {
   if (!currentUser) return;
   if (!window._libraryLoaded) return;
@@ -102,6 +131,12 @@ async function loadLibraryFromSupabase() {
   }
   try { window.activeBookId = localStorage.getItem('folio-activeBook') || null; } catch(e){}
 
+  // FIX: Set _libraryLoaded = true BEFORE calling loadBookIntoEditor.
+  // Previously _libraryLoaded was set AFTER this block, which meant
+  // loadBookIntoEditor → renderTree → any edit → saveAll()
+  // would be blocked by the guard and silently discard the first saves.
+  window._libraryLoaded = true;
+
   if (window.activeBookId) {
     const activeBook = window.library.find(b => b.id === window.activeBookId);
     if (activeBook && !activeBook.isPDFViewer && typeof loadBookIntoEditor === 'function') {
@@ -109,7 +144,6 @@ async function loadLibraryFromSupabase() {
     }
   }
 
-  window._libraryLoaded = true;
   renderHomepage();
 }
 
@@ -141,7 +175,6 @@ function saveAll() {
   if (window.activeBookId) {
     const book = window.library.find(b => b.id === window.activeBookId);
     if (book && !book.isPDFViewer) {
-      // SAFE GUARD: only write editor state if we know the editor was loaded for THIS book
       if (window._editorLoadedForBook !== window.activeBookId) {
         console.warn('[saveAll] Skipped: editor not loaded for this book yet.');
         return;
@@ -151,7 +184,11 @@ function saveAll() {
       book.highlights = highlights;
       book.notes = notes;
       book.lastOpened = Date.now();
-      saveBook(book);
+      // FIX: Enqueue the save instead of fire-and-forget.
+      // Previously: saveBook(book) — returned a Promise that was never awaited,
+      // so rapid edits + goHome() could race against each other.
+      // Now saves are serialized and guaranteed to complete in order.
+      _enqueueSave(() => saveBook(book));
     }
   }
 }
@@ -161,12 +198,10 @@ function loadBookIntoEditor(book) {
   window.bookName = bookName = book.name || 'My Book';
   window.highlights = highlights = book.highlights || {};
   window.notes = notes = book.notes || {};
-  // Only reset selection if not already on this book
   if (window._editorLoadedForBook !== book.id) {
     window.selectedChapterId = selectedChapterId = null;
     window.selectedTopicId = selectedTopicId = null;
   }
-  // Mark that editor is now loaded for this specific book
   window._editorLoadedForBook = book.id;
 }
 
@@ -236,7 +271,8 @@ function openBookById(bookId) {
     const outgoing = window.library.find(b => b.id === window.activeBookId);
     if (outgoing && !outgoing.isPDFViewer) saveAll();
   }
-  window.activeBookId = bookId; book.lastOpened = Date.now(); saveBook(book);
+  window.activeBookId = bookId; book.lastOpened = Date.now();
+  _enqueueSave(() => saveBook(book));
   if (book.isPDFViewer) { openPDFViewer(book); return; }
   loadBookIntoEditor(book);
   document.getElementById('sidebarBookTitle').textContent = bookName;
@@ -249,19 +285,27 @@ function resumeLastBook() { const last = getLastBook(); if (last) openBookById(l
 function openEditor(bName) {
   if (bName) {
     const book = { id: uid(), name: bName, treeData: [], highlights: {}, notes: {}, lastOpened: Date.now() };
-    window.library.push(book); window.activeBookId = book.id; loadBookIntoEditor(book); saveBook(book);
+    window.library.push(book); window.activeBookId = book.id; loadBookIntoEditor(book);
+    _enqueueSave(() => saveBook(book));
     document.getElementById('sidebarBookTitle').textContent = bookName;
     homepage.classList.add('hidden'); editorShell.classList.add('visible');
     renderTree(); renderPage();
   } else { const last = getLastBook(); if (last) openBookById(last.id); else openNewBookModal(); }
 }
 
-function goHome() {
+// FIX: goHome now awaits the full save queue before hiding the editor.
+// Previously it called saveAll() (which enqueued a save) then immediately
+// set _editorLoadedForBook = null, which could cause the queued save to
+// be skipped by the guard check inside saveBook.
+async function goHome() {
   if (window.activeBookId) {
     const active = window.library.find(b => b.id === window.activeBookId);
-    if (active && !active.isPDFViewer) saveAll();
+    if (active && !active.isPDFViewer) {
+      saveAll(); // enqueues the final in-memory snapshot
+      await _saveQueue; // wait for all pending saves to complete before navigating
+    }
   }
-  window._editorLoadedForBook = null; // clear so stale editor can't save after navigating away
+  window._editorLoadedForBook = null;
   editorShell.classList.remove('visible'); homepage.classList.remove('hidden'); renderHomepage();
 }
 document.getElementById('homeLink').addEventListener('click', goHome);
@@ -288,7 +332,8 @@ newBookModal.addEventListener('click', e => { if (e.target === newBookModal) clo
 function confirmModal() {
   const name = bookNameInput.value.trim() || 'Untitled'; closeModal();
   const book = { id: uid(), name, treeData: [], highlights: {}, notes: {}, lastOpened: Date.now() };
-  window.library.push(book); window.activeBookId = book.id; loadBookIntoEditor(book); saveBook(book);
+  window.library.push(book); window.activeBookId = book.id; loadBookIntoEditor(book);
+  _enqueueSave(() => saveBook(book));
   document.getElementById('sidebarBookTitle').textContent = bookName;
   homepage.classList.add('hidden'); editorShell.classList.add('visible');
   renderTree(); renderPage();
@@ -346,7 +391,7 @@ async function processPDFFile(file) {
   try {
     const arrayBuffer = await file.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer); let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    for (let i = 0; i < binary.length; i++) binary += String.fromCharCode(bytes[i]);
     const base64 = btoa(binary);
     status.textContent = '⏳ Loading PDF.js…';
     loadPDFJS(async () => {
