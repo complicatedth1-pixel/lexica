@@ -1,7 +1,4 @@
 // auth.js — Supabase client, sign-in/out, Google OAuth, user menu
-// Owns: sb (Supabase), currentUser
-// Calls: onUserLoggedIn(user) after successful login
-
 'use strict';
 
 const SUPABASE_URL = 'https://ckrtzfyqkcgnsbueetqh.supabase.co';
@@ -12,11 +9,6 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
 });
 
 let currentUser = null;
-
-// FIX: Guard against double-fire of onUserLoggedIn.
-// onAuthStateChange fires on page load AND checkSessionOnLoad also fires —
-// both call onUserLoggedIn → loadLibraryFromSupabase() twice, causing the
-// second fetch to overwrite library state while first-load saves are in flight.
 let _loginHandled = false;
 
 let _authTab = 'login';
@@ -34,8 +26,7 @@ function showAuthTab(tab) {
 
 function showAuthError(msg) {
   const el = document.getElementById('authError');
-  el.textContent = msg;
-  el.style.display = 'block';
+  el.textContent = msg; el.style.display = 'block';
 }
 
 async function signInWithGoogle() {
@@ -63,7 +54,7 @@ async function submitAuth() {
 }
 
 async function signOut() {
-  _loginHandled = false; // reset so next login works
+  _loginHandled = false;
   await sb.auth.signOut();
   location.reload();
 }
@@ -81,22 +72,12 @@ document.addEventListener('click', e => {
 });
 
 function onUserLoggedIn(user) {
-  // FIX: Only handle login once per page load.
-  // Without this, both checkSessionOnLoad() and onAuthStateChange() fire on
-  // every page load, calling loadLibraryFromSupabase() twice and creating a
-  // race where the second fetch overwrites in-flight save data.
   if (_loginHandled && currentUser?.id === user.id) return;
   _loginHandled = true;
-
   currentUser = user;
-
-  // FIX: Expose currentUser globally so stopwatch.js beforeunload beacon
-  // can access it. Previously it was only a local var in auth.js scope.
   window.currentUser = user;
 
-  // FIX: Expose the session token so beforeunload sendBeacon can include
-  // the Authorization header that Supabase REST requires.
-  // Without this, the beacon fires with no auth headers → 401 → silent loss.
+  // Keep access token fresh for beforeunload beacon
   sb.auth.getSession().then(({ data }) => {
     window._supabaseAccessToken = data?.session?.access_token || null;
   });
@@ -106,14 +87,22 @@ function onUserLoggedIn(user) {
   const initial = (user.user_metadata?.full_name || user.email || '?')[0].toUpperCase();
   document.getElementById('userAvatarBtn').textContent = initial;
   document.getElementById('userEmailDisplay').textContent = user.email || '';
-  loadLibraryFromSupabase(); // defined in library.js
-  if (window.promptSettings) window.promptSettings.init();
+
+  // FIX: auth.js loads before library.js so loadLibraryFromSupabase is not
+  // defined yet when onAuthStateChange fires synchronously on page load.
+  // Defer with setTimeout(0) to let all scripts finish parsing first.
+  setTimeout(() => {
+    if (typeof loadLibraryFromSupabase === 'function') {
+      loadLibraryFromSupabase();
+    } else {
+      console.error('[auth] loadLibraryFromSupabase still not defined after defer');
+    }
+    if (window.promptSettings) window.promptSettings.init();
+  }, 0);
 }
 
 sb.auth.onAuthStateChange((event, session) => {
   if (session?.user) {
-    // FIX: Keep access token fresh on token refresh events so beacon always
-    // has a valid JWT even after a long session.
     window._supabaseAccessToken = session.access_token || null;
     onUserLoggedIn(session.user);
   } else if (event === 'SIGNED_OUT' || !session) {
@@ -126,6 +115,8 @@ sb.auth.onAuthStateChange((event, session) => {
   }
 });
 
+// checkSessionOnLoad runs after DOMContentLoaded so all scripts are parsed —
+// no defer needed here, but kept consistent with the onAuthStateChange path.
 (async function checkSessionOnLoad() {
   const { data } = await sb.auth.getSession();
   if (data?.session?.user) {
@@ -134,7 +125,7 @@ sb.auth.onAuthStateChange((event, session) => {
   }
 })();
 
-// Expose to HTML onclick attributes
+// Expose
 window.showAuthTab = showAuthTab;
 window.signInWithGoogle = signInWithGoogle;
 window.submitAuth = submitAuth;

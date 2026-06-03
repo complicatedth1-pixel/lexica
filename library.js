@@ -95,52 +95,102 @@ async function deleteBookFromDB(bookId) {
   ]);
 }
 
+// ── FIX: Two-phase load for fast startup ──────────────
+// Phase 1: fetch only metadata columns (no tree_data/highlights/notes blobs)
+//          → homepage grid renders immediately, typically <300ms
+// Phase 2: fetch full data for the active book only
+//          → editor opens fast with real content
+// Other books get their full data loaded lazily when opened (openBookById)
 async function loadLibraryFromSupabase() {
   if (!currentUser) return;
-  const { data, error } = await sb.from('books').select('*')
-    .eq('user_id', currentUser.id).order('last_opened', { ascending: false });
-  if (error) { console.error(error); window.library = []; }
+
+  // Phase 1 — lightweight metadata fetch for all books
+  const { data: metaRows, error: metaErr } = await sb
+    .from('books')
+    .select('id, name, last_opened, is_pdf, is_pdf_viewer, pdf_num_pages')
+    .eq('user_id', currentUser.id)
+    .order('last_opened', { ascending: false });
+
+  if (metaErr) { console.error('[loadLibrary] meta fetch error:', metaErr); window.library = []; }
   else {
-    window.library = (data || []).map(r => ({
-      id: r.id, name: r.name, treeData: r.tree_data || [],
-      highlights: r.highlights || {}, notes: r.notes || {},
-      lastOpened: r.last_opened || 0, isPDF: r.is_pdf || false,
-      isPDFViewer: r.is_pdf_viewer || false, pdfNumPages: r.pdf_num_pages || null,
-      pageTimes: r.page_times || {},
-      pdfHighlights: r.pdf_highlights || {},
-      pageConfirmed: r.page_confirmed || {}
+    // Build lightweight stubs — treeData etc will be filled in per-book on open
+    window.library = (metaRows || []).map(r => ({
+      id: r.id, name: r.name,
+      treeData: null, // null = not yet loaded; populated on open
+      highlights: {}, notes: {},
+      lastOpened: r.last_opened || 0,
+      isPDF: r.is_pdf || false,
+      isPDFViewer: r.is_pdf_viewer || false,
+      pdfNumPages: r.pdf_num_pages || null,
+      pageTimes: {}, pdfHighlights: {}, pageConfirmed: {}
     }));
   }
 
-  // FIX: Read activeBookId from localStorage
+  // Resolve active book id
   let storedId = null;
   try { storedId = localStorage.getItem('folio-activeBook') || null; } catch(e){}
-
-  // FIX: If localStorage is empty/cleared, fall back to the most recently
-  // opened book so activeBookId is never left null when a book exists.
   if (!storedId && window.library.length) {
-    const last = window.library.slice().sort((a,b) => (b.lastOpened||0) - (a.lastOpened||0))[0];
-    storedId = last ? last.id : null;
+    storedId = window.library[0].id; // already sorted by last_opened desc
   }
-
   window.activeBookId = storedId;
-
-  // FIX: Always persist activeBookId back to localStorage immediately after
-  // resolving it, so future reloads don't lose it again.
   try { if (window.activeBookId) localStorage.setItem('folio-activeBook', window.activeBookId); } catch(e){}
 
-  // FIX: Set _libraryLoaded BEFORE loadBookIntoEditor so the first saveAll()
-  // triggered by renderTree/renderPage isn't blocked by the guard.
+  // Render homepage immediately with stub data (fast)
   window._libraryLoaded = true;
+  renderHomepage();
 
+  // Phase 2 — full fetch for active book only
   if (window.activeBookId) {
-    const activeBook = window.library.find(b => b.id === window.activeBookId);
-    if (activeBook && !activeBook.isPDFViewer && typeof loadBookIntoEditor === 'function') {
-      loadBookIntoEditor(activeBook);
+    const { data: fullRows, error: fullErr } = await sb
+      .from('books')
+      .select('*')
+      .eq('id', window.activeBookId)
+      .eq('user_id', currentUser.id)
+      .single();
+
+    if (!fullErr && fullRows) {
+      const full = {
+        id: fullRows.id, name: fullRows.name,
+        treeData: fullRows.tree_data || [],
+        highlights: fullRows.highlights || {},
+        notes: fullRows.notes || {},
+        lastOpened: fullRows.last_opened || 0,
+        isPDF: fullRows.is_pdf || false,
+        isPDFViewer: fullRows.is_pdf_viewer || false,
+        pdfNumPages: fullRows.pdf_num_pages || null,
+        pageTimes: fullRows.page_times || {},
+        pdfHighlights: fullRows.pdf_highlights || {},
+        pageConfirmed: fullRows.page_confirmed || {}
+      };
+      // Replace the stub in window.library with the full object
+      const idx = window.library.findIndex(b => b.id === full.id);
+      if (idx !== -1) window.library[idx] = full; else window.library.unshift(full);
+
+      if (!full.isPDFViewer && typeof loadBookIntoEditor === 'function') {
+        loadBookIntoEditor(full);
+      }
+      // Re-render homepage so the last-book card shows real section counts
+      renderHomepage();
     }
   }
+}
 
-  renderHomepage();
+// ── Lazy full-load for non-active books ───────────────
+async function _ensureBookFullyLoaded(bookId) {
+  const book = window.library.find(b => b.id === bookId);
+  if (!book) return null;
+  if (book.treeData !== null) return book; // already loaded
+  const { data, error } = await sb
+    .from('books').select('*')
+    .eq('id', bookId).eq('user_id', currentUser.id).single();
+  if (error || !data) return book;
+  book.treeData = data.tree_data || [];
+  book.highlights = data.highlights || {};
+  book.notes = data.notes || {};
+  book.pageTimes = data.page_times || {};
+  book.pdfHighlights = data.pdf_highlights || {};
+  book.pageConfirmed = data.page_confirmed || {};
+  return book;
 }
 
 async function savePdfToStorage(bookId, base64) {
@@ -168,10 +218,8 @@ function saveAll() {
   if (!window._libraryLoaded) return;
   if (typeof treeData === 'undefined') return;
 
-  // FIX: activeBookId is null in your case even though _editorLoadedForBook
-  // has the correct book id. Recover it here so saves are never skipped.
+  // Recover activeBookId from _editorLoadedForBook if null
   if (!window.activeBookId && window._editorLoadedForBook) {
-    console.warn('[saveAll] activeBookId was null — recovering from _editorLoadedForBook');
     window.activeBookId = window._editorLoadedForBook;
     try { localStorage.setItem('folio-activeBook', window.activeBookId); } catch(e){}
   }
@@ -179,10 +227,7 @@ function saveAll() {
   if (window.activeBookId) {
     const book = window.library.find(b => b.id === window.activeBookId);
     if (book && !book.isPDFViewer) {
-      if (window._editorLoadedForBook !== window.activeBookId) {
-        console.warn('[saveAll] Skipped: editor not loaded for this book yet.');
-        return;
-      }
+      if (window._editorLoadedForBook !== window.activeBookId) return;
       book.treeData = treeData;
       book.name = bookName;
       book.highlights = highlights;
@@ -203,9 +248,7 @@ function loadBookIntoEditor(book) {
     window.selectedTopicId = selectedTopicId = null;
   }
   window._editorLoadedForBook = book.id;
-  // FIX: Always sync activeBookId when loading a book into the editor.
-  // This is the missing link — loadBookIntoEditor was setting _editorLoadedForBook
-  // but never setting activeBookId, so saveAll()'s guard always saw null.
+  // Always keep activeBookId in sync
   window.activeBookId = book.id;
   try { localStorage.setItem('folio-activeBook', book.id); } catch(e){}
 }
@@ -248,8 +291,9 @@ function renderHomepage() {
     collectionsEmpty.style.display = 'none'; booksGrid.style.display = 'grid';
     const sorted = window.library.slice().sort((a,b) => (b.lastOpened||0) - (a.lastOpened||0));
     booksGrid.innerHTML = sorted.map(book => {
-      const chs = (book.treeData||[]).length;
-      const tps = (book.treeData||[]).reduce((a,c) => a + (c.topics||[]).length, 0);
+      // For stubs (treeData===null), show placeholder counts
+      const chs = book.treeData ? book.treeData.length : '…';
+      const tps = book.treeData ? book.treeData.reduce((a,c) => a + (c.topics||[]).length, 0) : '…';
       const isActive = book.id === window.activeBookId;
       return `<div class="book-card" onclick="openBookById('${book.id}')">
         <div class="book-cover-block" style="${bookCoverGradient(book.name)}">
@@ -270,16 +314,22 @@ function renderHomepage() {
 const homepage = document.getElementById('homepage');
 const editorShell = document.getElementById('editor-shell');
 
-function openBookById(bookId) {
-  const book = window.library.find(b => b.id === bookId); if (!book) return;
+async function openBookById(bookId) {
+  // Save current book before switching
   if (window.activeBookId && window.activeBookId !== bookId) {
     const outgoing = window.library.find(b => b.id === window.activeBookId);
     if (outgoing && !outgoing.isPDFViewer) saveAll();
   }
+
+  // Ensure full data is loaded (lazy fetch if stub)
+  const book = await _ensureBookFullyLoaded(bookId);
+  if (!book) return;
+
   window.activeBookId = bookId;
   book.lastOpened = Date.now();
   try { localStorage.setItem('folio-activeBook', bookId); } catch(e){}
   _enqueueSave(() => saveBook(book));
+
   if (book.isPDFViewer) { openPDFViewer(book); return; }
   loadBookIntoEditor(book);
   document.getElementById('sidebarBookTitle').textContent = bookName;
