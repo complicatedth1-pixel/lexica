@@ -210,3 +210,111 @@ footer { background: var(--glass); border-top: 1px solid var(--border-color); pa
   /* For print, page breaks happen naturally at A4 boundaries */
   .a4-section-wrap { break-inside: avoid-page; }
 }
+/* ── Book Cover Image Additions ────────────────────────
+   Paste at the bottom of style-base.css
+   ──────────────────────────────────────────────────── */
+
+/* Hero section — cover image overlay */
+.hero {
+  position: relative;
+  overflow: hidden;
+}
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+  pointer-events: none;
+}
+/* Darken gradient so text stays readable over any photo */
+.hero.has-cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    to bottom,
+    rgba(13,12,10,0.55) 0%,
+    rgba(13,12,10,0.25) 40%,
+    rgba(13,12,10,0.65) 100%
+  );
+  pointer-events: none;
+}
+.hero-content {
+  position: relative;
+  z-index: 2;
+}
+
+/* Edit cover button on last-book card */
+.lbc-cover {
+  position: relative;
+}
+.lbc-cover-edit-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #e0d0b0;
+  font-size: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  backdrop-filter: blur(6px);
+  z-index: 3;
+}
+.last-book-card:hover .lbc-cover-edit-btn,
+.lbc-cover:hover .lbc-cover-edit-btn {
+  opacity: 1;
+}
+
+/* Edit cover badge on book grid cards */
+.book-cover-block {
+  position: relative;
+}
+.book-cover-edit-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #e0d0b0;
+  font-size: 12px;
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  backdrop-filter: blur(4px);
+  z-index: 3;
+}
+.book-card:hover .book-cover-edit-badge {
+  opacity: 1;
+}
+
+/* Cover preview in modal — show/hide "no cover" placeholder */
+#bookCoverModal #bookCoverPreview[src=""],
+#bookCoverModal #bookCoverPreview:not([src]) {
+  display: none !important;
+}
+#bookCoverModal #bookCoverPreview[src]:not([src=""]) {
+  display: block !important;
+}
+/* Hide the "no cover" text when image is showing */
+#bookCoverModal #bookCoverPreview[src]:not([src=""]) ~ #bookCoverNone,
+#bookCoverModal #bookCoverPreview[style*="block"] ~ #bookCoverNone {
+  display: none;
+}

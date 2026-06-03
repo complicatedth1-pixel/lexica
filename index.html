@@ -495,6 +495,53 @@ function injectHLButtons() {
   injectRightPanelCategories();
 })();
 </script>
+<!-- BOOK COVER MODAL — paste anywhere before </body> in index.html -->
+<div class="modal-overlay" id="bookCoverModal" onclick="if(event.target===this)closeBookCoverModal()">
+  <div class="modal-box" style="width:480px;max-width:95vw;">
+    <div class="modal-title">Book Cover</div>
+    <p class="modal-sub">Upload an image from your device, paste a URL, or remove the current cover. Cover is optional.</p>
 
+    <!-- Preview -->
+    <div id="bookCoverPreviewWrap" style="margin-bottom:1.2rem;border-radius:8px;overflow:hidden;position:relative;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);min-height:60px;display:flex;align-items:center;justify-content:center;">
+      <img id="bookCoverPreview" src="" alt="Cover preview"
+        style="display:none;width:100%;max-height:240px;object-fit:cover;border-radius:8px;">
+      <span id="bookCoverNone" style="font-size:12px;color:#554e68;font-family:sans-serif;padding:1rem;">No cover set</span>
+    </div>
+
+    <!-- Upload from device -->
+    <div style="margin-bottom:10px;">
+      <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#554e68;font-family:sans-serif;margin-bottom:6px;">Upload from device</div>
+      <input type="file" id="bookCoverFileInput" accept="image/*" style="display:none;"
+        onchange="handleBookCoverFileUpload(this)">
+      <button onclick="document.getElementById('bookCoverFileInput').click()"
+        style="background:rgba(160,130,220,.15);border:1px solid rgba(160,130,220,.3);color:#c8b8e8;padding:7px 16px;border-radius:4px;font-size:12px;font-family:sans-serif;cursor:pointer;min-height:40px;width:100%;">
+        📁 Choose Image…
+      </button>
+    </div>
+
+    <!-- URL input -->
+    <div style="margin-bottom:14px;">
+      <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#554e68;font-family:sans-serif;margin-bottom:6px;">Or paste an image URL</div>
+      <div style="display:flex;gap:8px;">
+        <input id="bookCoverUrlInput" type="url" placeholder="https://example.com/cover.jpg"
+          style="flex:1;padding:9px 12px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:#e0d0b0;font-family:sans-serif;font-size:13px;outline:none;min-width:0;">
+        <button onclick="saveBookCoverFromUrl()"
+          style="background:rgba(212,135,42,.2);border:1px solid rgba(212,135,42,.4);color:#d4a060;padding:8px 14px;border-radius:6px;font-size:12px;font-family:sans-serif;cursor:pointer;white-space:nowrap;min-height:40px;">
+          Use URL
+        </button>
+      </div>
+    </div>
+
+    <div id="bookCoverStatus" style="font-size:12px;font-family:sans-serif;color:#90dba0;min-height:18px;margin-bottom:12px;"></div>
+
+    <div class="modal-actions" style="display:flex;justify-content:space-between;gap:8px;">
+      <button onclick="removeBookCover()"
+        style="background:rgba(255,80,80,.1);border:1px solid rgba(255,80,80,.25);color:#ff8a8a;padding:8px 14px;border-radius:6px;font-size:12px;font-family:sans-serif;cursor:pointer;min-height:40px;">
+        🗑 Remove Cover
+      </button>
+      <button class="modal-cancel" onclick="closeBookCoverModal()">Done</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

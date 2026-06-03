@@ -18,10 +18,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     const awayMs = Date.now() - window._tabFocusedAt;
     if (awayMs > 30000 && currentUser) {
-      _saveQueue.then(() => {
-        window._libraryLoaded = false;
-        loadLibraryFromSupabase();
-      });
+      _saveQueue.then(() => { window._libraryLoaded = false; loadLibraryFromSupabase(); });
     }
     window._tabFocusedAt = Date.now();
   } else {
@@ -63,6 +60,33 @@ function bookCoverGradient(name) {
   return `background:linear-gradient(135deg,hsl(${hue},30%,12%) 0%,hsl(${(hue+40)%360},20%,8%) 100%);`;
 }
 
+// ── Hero cover image ──────────────────────────────────
+function updateHeroCover(book) {
+  const heroBg = document.querySelector('.hero-bg');
+  const heroSection = document.querySelector('.hero');
+  if (!heroBg || !heroSection) return;
+
+  if (book && book.coverImage) {
+    heroBg.style.backgroundImage = `url(${CSS.escape ? book.coverImage : book.coverImage})`;
+    heroBg.style.backgroundSize = 'cover';
+    heroBg.style.backgroundPosition = 'center';
+    heroBg.style.opacity = '0';
+    heroSection.classList.add('has-cover');
+    // Fade in
+    requestAnimationFrame(() => {
+      heroBg.style.transition = 'opacity 0.8s ease';
+      heroBg.style.opacity = '0.35';
+    });
+  } else {
+    heroBg.style.transition = 'opacity 0.4s ease';
+    heroBg.style.opacity = '0';
+    setTimeout(() => {
+      heroBg.style.backgroundImage = '';
+      heroSection.classList.remove('has-cover');
+    }, 400);
+  }
+}
+
 // ── Supabase CRUD ─────────────────────────────────────
 async function saveBook(book) {
   if (!currentUser || !book) return;
@@ -74,7 +98,8 @@ async function saveBook(book) {
     is_pdf: book.isPDF || false, is_pdf_viewer: book.isPDFViewer || false,
     pdf_num_pages: book.pdfNumPages || null, page_times: book.pageTimes || {},
     pdf_highlights: book.pdfHighlights || {},
-    page_confirmed: book.pageConfirmed || {}
+    page_confirmed: book.pageConfirmed || {},
+    cover_image: book.coverImage || null
   };
   const { error } = await sb.from('books').upsert(row, { onConflict: 'id,user_id' });
   if (error) console.error('[saveBook] upsert error:', error);
@@ -95,58 +120,46 @@ async function deleteBookFromDB(bookId) {
   ]);
 }
 
-// ── FIX: Two-phase load for fast startup ──────────────
-// Phase 1: fetch only metadata columns (no tree_data/highlights/notes blobs)
-//          → homepage grid renders immediately, typically <300ms
-// Phase 2: fetch full data for the active book only
-//          → editor opens fast with real content
-// Other books get their full data loaded lazily when opened (openBookById)
+// ── Two-phase load ────────────────────────────────────
 async function loadLibraryFromSupabase() {
   if (!currentUser) return;
 
-  // Phase 1 — lightweight metadata fetch for all books
+  // Phase 1 — lightweight metadata
   const { data: metaRows, error: metaErr } = await sb
     .from('books')
-    .select('id, name, last_opened, is_pdf, is_pdf_viewer, pdf_num_pages')
+    .select('id, name, last_opened, is_pdf, is_pdf_viewer, pdf_num_pages, cover_image')
     .eq('user_id', currentUser.id)
     .order('last_opened', { ascending: false });
 
   if (metaErr) { console.error('[loadLibrary] meta fetch error:', metaErr); window.library = []; }
   else {
-    // Build lightweight stubs — treeData etc will be filled in per-book on open
     window.library = (metaRows || []).map(r => ({
       id: r.id, name: r.name,
-      treeData: null, // null = not yet loaded; populated on open
+      treeData: null,
       highlights: {}, notes: {},
       lastOpened: r.last_opened || 0,
       isPDF: r.is_pdf || false,
       isPDFViewer: r.is_pdf_viewer || false,
       pdfNumPages: r.pdf_num_pages || null,
-      pageTimes: {}, pdfHighlights: {}, pageConfirmed: {}
+      pageTimes: {}, pdfHighlights: {}, pageConfirmed: {},
+      coverImage: r.cover_image || null
     }));
   }
 
-  // Resolve active book id
   let storedId = null;
   try { storedId = localStorage.getItem('folio-activeBook') || null; } catch(e){}
-  if (!storedId && window.library.length) {
-    storedId = window.library[0].id; // already sorted by last_opened desc
-  }
+  if (!storedId && window.library.length) storedId = window.library[0].id;
   window.activeBookId = storedId;
   try { if (window.activeBookId) localStorage.setItem('folio-activeBook', window.activeBookId); } catch(e){}
 
-  // Render homepage immediately with stub data (fast)
   window._libraryLoaded = true;
   renderHomepage();
 
-  // Phase 2 — full fetch for active book only
+  // Phase 2 — full data for active book
   if (window.activeBookId) {
     const { data: fullRows, error: fullErr } = await sb
-      .from('books')
-      .select('*')
-      .eq('id', window.activeBookId)
-      .eq('user_id', currentUser.id)
-      .single();
+      .from('books').select('*')
+      .eq('id', window.activeBookId).eq('user_id', currentUser.id).single();
 
     if (!fullErr && fullRows) {
       const full = {
@@ -160,28 +173,22 @@ async function loadLibraryFromSupabase() {
         pdfNumPages: fullRows.pdf_num_pages || null,
         pageTimes: fullRows.page_times || {},
         pdfHighlights: fullRows.pdf_highlights || {},
-        pageConfirmed: fullRows.page_confirmed || {}
+        pageConfirmed: fullRows.page_confirmed || {},
+        coverImage: fullRows.cover_image || null
       };
-      // Replace the stub in window.library with the full object
       const idx = window.library.findIndex(b => b.id === full.id);
       if (idx !== -1) window.library[idx] = full; else window.library.unshift(full);
-
-      if (!full.isPDFViewer && typeof loadBookIntoEditor === 'function') {
-        loadBookIntoEditor(full);
-      }
-      // Re-render homepage so the last-book card shows real section counts
+      if (!full.isPDFViewer && typeof loadBookIntoEditor === 'function') loadBookIntoEditor(full);
       renderHomepage();
     }
   }
 }
 
-// ── Lazy full-load for non-active books ───────────────
 async function _ensureBookFullyLoaded(bookId) {
   const book = window.library.find(b => b.id === bookId);
   if (!book) return null;
-  if (book.treeData !== null) return book; // already loaded
-  const { data, error } = await sb
-    .from('books').select('*')
+  if (book.treeData !== null) return book;
+  const { data, error } = await sb.from('books').select('*')
     .eq('id', bookId).eq('user_id', currentUser.id).single();
   if (error || !data) return book;
   book.treeData = data.tree_data || [];
@@ -190,6 +197,7 @@ async function _ensureBookFullyLoaded(bookId) {
   book.pageTimes = data.page_times || {};
   book.pdfHighlights = data.pdf_highlights || {};
   book.pageConfirmed = data.page_confirmed || {};
+  book.coverImage = data.cover_image || null;
   return book;
 }
 
@@ -198,32 +206,24 @@ async function savePdfToStorage(bookId, base64) {
   const binary = atob(base64); const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   const blob = new Blob([bytes], { type: 'application/pdf' });
-  await sb.storage.from('pdfs').upload(`${currentUser.id}/${bookId}`, blob,
-    { upsert: true, contentType: 'application/pdf' });
+  await sb.storage.from('pdfs').upload(`${currentUser.id}/${bookId}`, blob, { upsert: true, contentType: 'application/pdf' });
 }
 
 async function loadPdfFromStorage(bookId) {
   if (!currentUser) return null;
   const { data, error } = await sb.storage.from('pdfs').download(`${currentUser.id}/${bookId}`);
   if (error || !data) return null;
-  return new Promise(resolve => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result.split(',')[1]);
-    r.readAsDataURL(data);
-  });
+  return new Promise(resolve => { const r = new FileReader(); r.onload = () => resolve(r.result.split(',')[1]); r.readAsDataURL(data); });
 }
 
 // ── In-memory sync ────────────────────────────────────
 function saveAll() {
   if (!window._libraryLoaded) return;
   if (typeof treeData === 'undefined') return;
-
-  // Recover activeBookId from _editorLoadedForBook if null
   if (!window.activeBookId && window._editorLoadedForBook) {
     window.activeBookId = window._editorLoadedForBook;
     try { localStorage.setItem('folio-activeBook', window.activeBookId); } catch(e){}
   }
-
   if (window.activeBookId) {
     const book = window.library.find(b => b.id === window.activeBookId);
     if (book && !book.isPDFViewer) {
@@ -248,15 +248,113 @@ function loadBookIntoEditor(book) {
     window.selectedTopicId = selectedTopicId = null;
   }
   window._editorLoadedForBook = book.id;
-  // Always keep activeBookId in sync
   window.activeBookId = book.id;
   try { localStorage.setItem('folio-activeBook', book.id); } catch(e){}
 }
 
+// ── Book cover image helpers ──────────────────────────
+// Compress image to base64, max 800px wide, quality 0.75
+function _compressImage(file, maxW, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxW / img.width);
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+// Called from the book cover modal
+window.openBookCoverModal = function(bookId) {
+  const book = window.library.find(b => b.id === (bookId || window.activeBookId));
+  if (!book) return;
+  const modal = document.getElementById('bookCoverModal');
+  const preview = document.getElementById('bookCoverPreview');
+  const urlInput = document.getElementById('bookCoverUrlInput');
+  modal.dataset.bookId = book.id;
+  preview.src = book.coverImage || '';
+  preview.style.display = book.coverImage ? 'block' : 'none';
+  urlInput.value = '';
+  document.getElementById('bookCoverStatus').textContent = '';
+  modal.classList.add('open');
+};
+
+window.closeBookCoverModal = function() {
+  document.getElementById('bookCoverModal').classList.remove('open');
+};
+
+window.saveBookCoverFromUrl = async function() {
+  const url = document.getElementById('bookCoverUrlInput').value.trim();
+  const status = document.getElementById('bookCoverStatus');
+  if (!url) { status.textContent = 'Enter a URL'; return; }
+  const modal = document.getElementById('bookCoverModal');
+  const book = window.library.find(b => b.id === modal.dataset.bookId);
+  if (!book) return;
+  status.textContent = 'Testing URL…';
+  // Validate the URL loads as an image
+  const img = new Image();
+  img.onload = async () => {
+    book.coverImage = url;
+    _enqueueSave(() => saveBook(book));
+    document.getElementById('bookCoverPreview').src = url;
+    document.getElementById('bookCoverPreview').style.display = 'block';
+    status.textContent = '✓ Cover saved';
+    renderHomepage();
+  };
+  img.onerror = () => { status.textContent = '❌ Could not load image from that URL'; };
+  img.src = url;
+};
+
+window.handleBookCoverFileUpload = async function(input) {
+  const file = input.files[0]; if (!file) return;
+  const status = document.getElementById('bookCoverStatus');
+  const modal = document.getElementById('bookCoverModal');
+  const book = window.library.find(b => b.id === modal.dataset.bookId);
+  if (!book) return;
+  status.textContent = '⏳ Compressing…';
+  try {
+    const dataUrl = await _compressImage(file, 1200, 0.8);
+    book.coverImage = dataUrl;
+    _enqueueSave(() => saveBook(book));
+    document.getElementById('bookCoverPreview').src = dataUrl;
+    document.getElementById('bookCoverPreview').style.display = 'block';
+    status.textContent = '✓ Cover saved';
+    renderHomepage();
+  } catch(e) {
+    status.textContent = '❌ Could not read image';
+  }
+  input.value = '';
+};
+
+window.removeBookCover = function() {
+  const modal = document.getElementById('bookCoverModal');
+  const book = window.library.find(b => b.id === modal.dataset.bookId);
+  if (!book) return;
+  book.coverImage = null;
+  _enqueueSave(() => saveBook(book));
+  document.getElementById('bookCoverPreview').src = '';
+  document.getElementById('bookCoverPreview').style.display = 'none';
+  document.getElementById('bookCoverStatus').textContent = '✓ Cover removed';
+  renderHomepage();
+};
+
 // ── Homepage render ───────────────────────────────────
 function renderHomepage() {
-  const heroResumeBtn = document.getElementById('heroResumeBtn');
   const lastBook = getLastBook();
+
+  // Update hero cover image with the most-recently-opened book
+  updateHeroCover(lastBook);
+
+  const heroResumeBtn = document.getElementById('heroResumeBtn');
   if (lastBook) {
     heroResumeBtn.style.display = 'inline-flex';
     heroResumeBtn.textContent = lastBook.isPDFViewer ? `↩ ${lastBook.name}` : `↩ Resume`;
@@ -272,14 +370,21 @@ function renderHomepage() {
     const totalSections = chapters.reduce((a,c) => a + (c.topics||[]).reduce((a2,t) => a2 + (t.sections||[]).length, 0), 0);
     const pct = totalSections > 0 ? Math.round(filledSections/totalSections*100) : 0;
     const ago = lastBook.lastOpened ? timeAgo(lastBook.lastOpened) : '';
+    const coverStyle = lastBook.coverImage
+      ? `background-image:url(${escHtml(lastBook.coverImage)});background-size:cover;background-position:center;`
+      : bookCoverGradient(lastBook.name);
     lastBookCard.innerHTML = `<div class="last-book-card" onclick="openBookById('${lastBook.id}')">
-      <div class="lbc-cover"><div class="lbc-cover-title">${escHtml(lastBook.name)}</div>
-      <div class="lbc-cover-overlay"><span class="lbc-open-btn">Open →</span></div></div>
+      <div class="lbc-cover" style="${coverStyle}">
+        <div class="lbc-cover-title">${escHtml(lastBook.name)}</div>
+        <div class="lbc-cover-overlay"><span class="lbc-open-btn">Open →</span></div>
+        <button class="lbc-cover-edit-btn" onclick="event.stopPropagation();openBookCoverModal('${lastBook.id}')" title="Change cover">🖼</button>
+      </div>
       <div class="lbc-info"><div class="lbc-name">${escHtml(lastBook.name)}</div>
       <div class="lbc-meta">${chapters.length} ch · ${totalTopics} topics · ${ago}</div>
       ${totalSections > 0 ? `<div class="lbc-progress-label">${filledSections}/${totalSections} sections (${pct}%)</div><div class="lbc-progress-track"><div class="lbc-progress-fill" style="width:${pct}%"></div></div>` : ''}
       <div class="lbc-actions">
         <button class="btn-primary" style="font-size:11px;padding:.5rem 1.2rem;" onclick="event.stopPropagation();openBookById('${lastBook.id}')">Open</button>
+        <button class="btn-ghost" style="font-size:11px;padding:.45rem 1rem;" onclick="event.stopPropagation();openBookCoverModal('${lastBook.id}')">🖼 Cover</button>
         <button class="btn-ghost" style="font-size:11px;padding:.45rem 1rem;" onclick="event.stopPropagation();deleteBook('${lastBook.id}')">Delete</button>
       </div></div></div>`;
   } else { recentEmpty.style.display = 'flex'; lastBookCard.style.display = 'none'; }
@@ -291,15 +396,18 @@ function renderHomepage() {
     collectionsEmpty.style.display = 'none'; booksGrid.style.display = 'grid';
     const sorted = window.library.slice().sort((a,b) => (b.lastOpened||0) - (a.lastOpened||0));
     booksGrid.innerHTML = sorted.map(book => {
-      // For stubs (treeData===null), show placeholder counts
       const chs = book.treeData ? book.treeData.length : '…';
       const tps = book.treeData ? book.treeData.reduce((a,c) => a + (c.topics||[]).length, 0) : '…';
       const isActive = book.id === window.activeBookId;
+      const coverStyle = book.coverImage
+        ? `background-image:url(${escHtml(book.coverImage)});background-size:cover;background-position:center;`
+        : bookCoverGradient(book.name);
       return `<div class="book-card" onclick="openBookById('${book.id}')">
-        <div class="book-cover-block" style="${bookCoverGradient(book.name)}">
-          <div class="book-cover-title">${escHtml(book.name)}</div>
+        <div class="book-cover-block" style="${coverStyle}">
+          <div class="book-cover-title" style="${book.coverImage ? 'text-shadow:0 2px 8px rgba(0,0,0,0.8);' : ''}">${escHtml(book.name)}</div>
           <div class="book-cover-overlay"><button class="book-open-btn">Open →</button></div>
           ${isActive ? '<div class="book-active-badge">✦ Active</div>' : ''}
+          <button class="book-cover-edit-badge" onclick="event.stopPropagation();openBookCoverModal('${book.id}')" title="Change cover">🖼</button>
         </div>
         <div class="book-meta-label">${timeAgo(book.lastOpened)}</div>
         <div class="book-meta-name" title="${escHtml(book.name)}">${escHtml(book.name)}</div>
@@ -315,21 +423,16 @@ const homepage = document.getElementById('homepage');
 const editorShell = document.getElementById('editor-shell');
 
 async function openBookById(bookId) {
-  // Save current book before switching
   if (window.activeBookId && window.activeBookId !== bookId) {
     const outgoing = window.library.find(b => b.id === window.activeBookId);
     if (outgoing && !outgoing.isPDFViewer) saveAll();
   }
-
-  // Ensure full data is loaded (lazy fetch if stub)
   const book = await _ensureBookFullyLoaded(bookId);
   if (!book) return;
-
   window.activeBookId = bookId;
   book.lastOpened = Date.now();
   try { localStorage.setItem('folio-activeBook', bookId); } catch(e){}
   _enqueueSave(() => saveBook(book));
-
   if (book.isPDFViewer) { openPDFViewer(book); return; }
   loadBookIntoEditor(book);
   document.getElementById('sidebarBookTitle').textContent = bookName;
@@ -341,7 +444,7 @@ function resumeLastBook() { const last = getLastBook(); if (last) openBookById(l
 
 function openEditor(bName) {
   if (bName) {
-    const book = { id: uid(), name: bName, treeData: [], highlights: {}, notes: {}, lastOpened: Date.now() };
+    const book = { id: uid(), name: bName, treeData: [], highlights: {}, notes: {}, lastOpened: Date.now(), coverImage: null };
     window.library.push(book); window.activeBookId = book.id;
     try { localStorage.setItem('folio-activeBook', book.id); } catch(e){}
     loadBookIntoEditor(book);
@@ -355,10 +458,7 @@ function openEditor(bName) {
 async function goHome() {
   if (window.activeBookId) {
     const active = window.library.find(b => b.id === window.activeBookId);
-    if (active && !active.isPDFViewer) {
-      saveAll();
-      await _saveQueue;
-    }
+    if (active && !active.isPDFViewer) { saveAll(); await _saveQueue; }
   }
   window._editorLoadedForBook = null;
   editorShell.classList.remove('visible'); homepage.classList.remove('hidden'); renderHomepage();
@@ -389,7 +489,7 @@ newBookModal.addEventListener('click', e => { if (e.target === newBookModal) clo
 
 function confirmModal() {
   const name = bookNameInput.value.trim() || 'Untitled'; closeModal();
-  const book = { id: uid(), name, treeData: [], highlights: {}, notes: {}, lastOpened: Date.now() };
+  const book = { id: uid(), name, treeData: [], highlights: {}, notes: {}, lastOpened: Date.now(), coverImage: null };
   window.library.push(book); window.activeBookId = book.id;
   try { localStorage.setItem('folio-activeBook', book.id); } catch(e){}
   loadBookIntoEditor(book);
@@ -459,13 +559,7 @@ async function processPDFFile(file) {
         const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         const numPages = pdf.numPages; status.textContent = `⏳ Detected ${numPages} pages…`;
         const bkName = file.name.replace(/\.pdf$/i, '').trim() || 'Imported PDF';
-        const newBook = {
-          id: uid(), name: bkName, pdfSourceName: bkName,
-          treeData: [], highlights: {}, notes: {},
-          lastOpened: Date.now(), isPDF: true, isPDFViewer: true,
-          pdfBase64: base64, pdfNumPages: numPages,
-          pageTimes: {}, pdfHighlights: {}
-        };
+        const newBook = { id: uid(), name: bkName, pdfSourceName: bkName, treeData: [], highlights: {}, notes: {}, lastOpened: Date.now(), isPDF: true, isPDFViewer: true, pdfBase64: base64, pdfNumPages: numPages, pageTimes: {}, pdfHighlights: {}, coverImage: null };
         window.library.push(newBook); window.activeBookId = newBook.id;
         try { localStorage.setItem('folio-activeBook', newBook.id); } catch(e){}
         status.textContent = '⏳ Uploading to cloud…';
@@ -496,8 +590,8 @@ document.getElementById('exportPDFConfirm').addEventListener('click', () => {
 });
 
 function exportBookAsPDF(book) {
-  let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escHtml(book.name)}</title><link href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&display=swap" rel="stylesheet"><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Merriweather',serif;font-size:13pt;line-height:1.8;color:#111;background:#fff;padding:0;}.book-title-page{page-break-after:always;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:4rem;}.book-title-page h1{font-size:36pt;font-weight:300;}.chapter-heading{font-size:20pt;font-weight:300;margin:3rem 0 1rem;padding-bottom:0.5rem;border-bottom:1px solid #ddd;page-break-before:always;}.topic-heading{font-size:15pt;margin:2rem 0 0.8rem;}.section-content{margin:0 0 1.5rem;}.section-content p{margin-bottom:0.8em;}@page{margin:2.5cm 3cm;size:A4;}</style></head><body>`;
-  html += `<div class="book-title-page"><h1>${escHtml(book.name)}</h1><p>Exported from Lexica</p></div>`;
+  let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escHtml(book.name)}</title><link href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&display=swap" rel="stylesheet"><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Merriweather',serif;font-size:13pt;line-height:1.8;color:#111;background:#fff;}.book-title-page{page-break-after:always;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:4rem;}.book-title-page h1{font-size:36pt;font-weight:300;}.chapter-heading{font-size:20pt;font-weight:300;margin:3rem 0 1rem;padding-bottom:0.5rem;border-bottom:1px solid #ddd;page-break-before:always;}.topic-heading{font-size:15pt;margin:2rem 0 0.8rem;}.section-content{margin:0 0 1.5rem;}@page{margin:2.5cm 3cm;size:A4;}</style></head><body>`;
+  html += `<div class="book-title-page">${book.coverImage ? `<img src="${escHtml(book.coverImage)}" style="max-width:280px;max-height:360px;object-fit:cover;border-radius:4px;margin-bottom:2rem;">` : ''}<h1>${escHtml(book.name)}</h1><p>Exported from Lexica</p></div>`;
   (book.treeData||[]).forEach(ch => {
     html += `<h2 class="chapter-heading">${escHtml(ch.name)}</h2>`;
     (ch.topics||[]).forEach(tp => {
@@ -507,7 +601,7 @@ function exportBookAsPDF(book) {
   });
   html += `</body></html>`;
   const win = window.open('', '_blank');
-  if (!win) { showToast('❌ Pop-up blocked — allow pop-ups'); return; }
+  if (!win) { showToast('❌ Pop-up blocked'); return; }
   win.document.write(html); win.document.close(); win.onload = () => { win.focus(); win.print(); };
   showToast('✓ Opening print dialog…');
 }
@@ -533,7 +627,7 @@ homepage.addEventListener('drop', e => {
         window.library = payload.library; window.activeBookId = payload.activeBookId || null;
         saveLibrary().then(() => renderHomepage()); showToast('✓ Library restored');
       } else if (payload.treeData) {
-        const book = { id: uid(), name: payload.bookName||'Imported', treeData: payload.treeData||[], highlights: payload.highlights||{}, notes: payload.notes||{}, lastOpened: Date.now() };
+        const book = { id: uid(), name: payload.bookName||'Imported', treeData: payload.treeData||[], highlights: payload.highlights||{}, notes: payload.notes||{}, lastOpened: Date.now(), coverImage: null };
         window.library.push(book); window.activeBookId = book.id; loadBookIntoEditor(book);
         saveBook(book); renderHomepage(); showToast(`✓ Imported "${book.name}"`);
       }
@@ -542,12 +636,10 @@ homepage.addEventListener('drop', e => {
   reader.readAsText(file);
 });
 
-// Expose to HTML
-// FIX: Notify auth.js that loadLibraryFromSupabase is now defined.
-// auth.js may have received the auth callback before this file parsed,
-// in which case it stored the user in _pendingUser and is waiting for this.
+// ── Notify auth.js that library is ready ─────────────
 if (typeof window._onLibraryReady === 'function') window._onLibraryReady();
 
+// Expose
 window.openBookById = openBookById;
 window.resumeLastBook = resumeLastBook;
 window.openEditor = openEditor;
