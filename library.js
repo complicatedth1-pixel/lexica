@@ -543,6 +543,11 @@ homepage.addEventListener('drop', e => {
 });
 
 // Expose to HTML
+// FIX: Notify auth.js that loadLibraryFromSupabase is now defined.
+// auth.js may have received the auth callback before this file parsed,
+// in which case it stored the user in _pendingUser and is waiting for this.
+if (typeof window._onLibraryReady === 'function') window._onLibraryReady();
+
 window.openBookById = openBookById;
 window.resumeLastBook = resumeLastBook;
 window.openEditor = openEditor;

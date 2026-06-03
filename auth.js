@@ -71,13 +71,46 @@ document.addEventListener('click', e => {
   }
 });
 
+// FIX: onAuthStateChange fires synchronously inside createClient() above,
+// before library.js has parsed. setTimeout(0) is not enough.
+// Solution: store the pending user and let library.js call _onLibraryReady()
+// once it has finished defining loadLibraryFromSupabase.
+let _pendingUser = null;
+
+function _callLoadLibrary() {
+  if (typeof loadLibraryFromSupabase === 'function') {
+    loadLibraryFromSupabase();
+  } else {
+    // library.js not parsed yet — retry every 20ms until it is (max 3s)
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      if (typeof loadLibraryFromSupabase === 'function') {
+        clearInterval(interval);
+        loadLibraryFromSupabase();
+      } else if (attempts > 150) {
+        clearInterval(interval);
+        console.error('[auth] loadLibraryFromSupabase never became defined');
+      }
+    }, 20);
+  }
+}
+
+// Called by library.js at the bottom of its file once everything is defined
+window._onLibraryReady = function() {
+  if (_pendingUser) {
+    _pendingUser = null;
+    loadLibraryFromSupabase();
+    if (window.promptSettings) window.promptSettings.init();
+  }
+};
+
 function onUserLoggedIn(user) {
   if (_loginHandled && currentUser?.id === user.id) return;
   _loginHandled = true;
   currentUser = user;
   window.currentUser = user;
 
-  // Keep access token fresh for beforeunload beacon
   sb.auth.getSession().then(({ data }) => {
     window._supabaseAccessToken = data?.session?.access_token || null;
   });
@@ -88,17 +121,14 @@ function onUserLoggedIn(user) {
   document.getElementById('userAvatarBtn').textContent = initial;
   document.getElementById('userEmailDisplay').textContent = user.email || '';
 
-  // FIX: auth.js loads before library.js so loadLibraryFromSupabase is not
-  // defined yet when onAuthStateChange fires synchronously on page load.
-  // Defer with setTimeout(0) to let all scripts finish parsing first.
-  setTimeout(() => {
-    if (typeof loadLibraryFromSupabase === 'function') {
-      loadLibraryFromSupabase();
-    } else {
-      console.error('[auth] loadLibraryFromSupabase still not defined after defer');
-    }
+  // If library.js is already loaded, call directly; otherwise queue it
+  if (typeof loadLibraryFromSupabase === 'function') {
+    loadLibraryFromSupabase();
     if (window.promptSettings) window.promptSettings.init();
-  }, 0);
+  } else {
+    _pendingUser = user;
+    _callLoadLibrary(); // also starts the retry interval as fallback
+  }
 }
 
 sb.auth.onAuthStateChange((event, session) => {
@@ -115,8 +145,6 @@ sb.auth.onAuthStateChange((event, session) => {
   }
 });
 
-// checkSessionOnLoad runs after DOMContentLoaded so all scripts are parsed —
-// no defer needed here, but kept consistent with the onAuthStateChange path.
 (async function checkSessionOnLoad() {
   const { data } = await sb.auth.getSession();
   if (data?.session?.user) {
@@ -125,7 +153,6 @@ sb.auth.onAuthStateChange((event, session) => {
   }
 })();
 
-// Expose
 window.showAuthTab = showAuthTab;
 window.signInWithGoogle = signInWithGoogle;
 window.submitAuth = submitAuth;
