@@ -408,6 +408,7 @@ function openTestingScreen(tp, questions) {
     startTime:     Date.now(),
     qStartTime:    Date.now(),
     qElapsed:      new Array(questions.length).fill(0),
+    submitted:     false,
     timerInterval: null
   };
 
@@ -434,16 +435,44 @@ function openTestingScreen(tp, questions) {
     </div>
   `;
 
+  // ── Fill content panel ──
   const contentEl = screen.querySelector('#tsContentInner');
   if (tp.sections) {
     tp.sections.forEach(s => {
       if (s.content && s.content.trim()) {
         const div = document.createElement('div');
         div.innerHTML = s.content;
+
+        // Strip highlight spans
         div.querySelectorAll('[class^="hl-span-"], [data-hl-cat]').forEach(el => {
-          const txt = document.createTextNode(el.textContent);
-          el.replaceWith(txt);
+          el.replaceWith(document.createTextNode(el.textContent));
         });
+
+        // Flatten tables — each cell becomes a paragraph
+        div.querySelectorAll('table').forEach(table => {
+          const cells = Array.from(table.querySelectorAll('td, th'));
+          const frag = document.createDocumentFragment();
+          cells.forEach(cell => {
+            const text = cell.textContent.trim();
+            if (!text) return;
+            const p = document.createElement('p');
+            p.textContent = text;
+            frag.appendChild(p);
+          });
+          table.replaceWith(frag);
+        });
+
+        // Strip column/grid/float styles
+        div.querySelectorAll('*').forEach(el => {
+          el.style.columnCount         = '';
+          el.style.columns             = '';
+          el.style.float               = '';
+          el.style.display             = '';
+          el.style.gridTemplateColumns = '';
+          el.style.width               = '';
+          el.style.maxWidth            = '';
+        });
+
         contentEl.appendChild(div);
       }
     });
