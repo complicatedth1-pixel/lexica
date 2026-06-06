@@ -429,6 +429,8 @@ function renderPage() {
 
   updateWordCount();
   setTimeout(initGroupHighlightsFromHTML, 80);
+  // Inject test button at bottom of topic content
+  if (typeof injectTestButton === 'function') injectTestButton();
 }
 
 // ── Manage Sections Modal ─────────────────────────────

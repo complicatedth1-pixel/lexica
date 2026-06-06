@@ -240,6 +240,9 @@ function renderAnalytics() {
 
   // ── Unconfirmed Reads section ──
   renderUnconfirmedSection();
+
+  // Questions analytics (async — fires and forgets)
+  if (typeof renderQuestionsAnalytics === 'function') renderQuestionsAnalytics();
 }
 
 function renderUnconfirmedSection() {
@@ -307,9 +310,324 @@ function confirmFromFilter() {
   if (book) confirmAllUnconfirmed(book.id);
 }
 
+// ── Questions Analytics ───────────────────────────────
+async function renderQuestionsAnalytics() {
+  // Create/find section
+  let section = document.getElementById('analyticsQuestionsSection');
+  if (!section) {
+    section = document.createElement('div');
+    section.id = 'analyticsQuestionsSection';
+    section.className = 'analytics-section qa-section';
+    // Insert after analyticsBooksGrid section
+    const booksSection = document.getElementById('analyticsBooksGrid').closest('.analytics-section');
+    booksSection.insertAdjacentElement('afterend', section);
+  }
+
+  section.innerHTML = `
+    <div class="analytics-section-title">Question <em>Analytics</em></div>
+    <div class="analytics-section-sub">Performance across all practice sessions</div>
+
+    <div class="qa-filter-row">
+      <select class="qa-filter-select" id="qaFilterBook" onchange="renderQuestionsAnalytics()">
+        <option value="all">All Books</option>
+        ${window.library.map(b => `<option value="${escHtml(b.id)}">${escHtml(b.name.length > 30 ? b.name.substring(0,28)+'…' : b.name)}</option>`).join('')}
+      </select>
+      <select class="qa-filter-select" id="qaFilterChapter" onchange="renderQuestionsAnalytics()">
+        <option value="all">All Chapters</option>
+      </select>
+      <select class="qa-filter-select" id="qaFilterTopic" onchange="renderQuestionsAnalytics()">
+        <option value="all">All Topics</option>
+      </select>
+      <div id="qaLoadingMsg" style="font-size:12px;color:#665f78;font-family:sans-serif;"></div>
+    </div>
+
+    <div id="qaContent"><div class="analytics-empty" style="padding:2rem;font-style:italic;">Loading…</div></div>
+  `;
+
+  // Populate chapter/topic dropdowns based on library
+  _qaPopulateDropdowns();
+
+  await _qaRenderContent();
+}
+
+function _qaPopulateDropdowns() {
+  const bookSel    = document.getElementById('qaFilterBook');
+  const chapterSel = document.getElementById('qaFilterChapter');
+  const topicSel   = document.getElementById('qaFilterTopic');
+  if (!bookSel || !chapterSel || !topicSel) return;
+
+  const selectedBook = bookSel.value;
+  chapterSel.innerHTML = '<option value="all">All Chapters</option>';
+  topicSel.innerHTML   = '<option value="all">All Topics</option>';
+
+  window.library.forEach(book => {
+    if (selectedBook !== 'all' && book.id !== selectedBook) return;
+    (book.treeData || []).forEach(ch => {
+      const opt = document.createElement('option');
+      opt.value = ch.id;
+      opt.textContent = ch.name.length > 28 ? ch.name.substring(0,26)+'…' : ch.name;
+      chapterSel.appendChild(opt);
+      (ch.topics || []).forEach(tp => {
+        const topt = document.createElement('option');
+        topt.value = tp.id;
+        topt.dataset.chapter = ch.id;
+        topt.textContent = (ch.name.substring(0,12) + ' › ' + tp.name).substring(0,36);
+        topicSel.appendChild(topt);
+      });
+    });
+  });
+}
+
+async function _qaRenderContent() {
+  const bookSel    = document.getElementById('qaFilterBook');
+  const chapterSel = document.getElementById('qaFilterChapter');
+  const topicSel   = document.getElementById('qaFilterTopic');
+  const content    = document.getElementById('qaContent');
+  const loading    = document.getElementById('qaLoadingMsg');
+  if (!content) return;
+
+  const filterBook    = bookSel    ? bookSel.value    : 'all';
+  const filterChapter = chapterSel ? chapterSel.value : 'all';
+  const filterTopic   = topicSel   ? topicSel.value   : 'all';
+
+  if (loading) loading.textContent = 'Loading…';
+
+  const filters = {};
+  if (filterBook    !== 'all') filters.book_id    = filterBook;
+  if (filterChapter !== 'all') filters.chapter_id = filterChapter;
+  if (filterTopic   !== 'all') filters.topic_id   = filterTopic;
+
+  const results = await qLoadResults({ ...filters, limit: 500 });
+
+  if (loading) loading.textContent = '';
+
+  if (!results.length) {
+    content.innerHTML = '<div class="analytics-empty" style="padding:2rem;font-style:italic;">No question attempts yet. Complete a test session to see analytics here.</div>';
+    return;
+  }
+
+  // ── Compute stats ──
+  const total    = results.length;
+  const correct  = results.filter(r => r.correct).length;
+  const pct      = Math.round((correct / total) * 100);
+  const avgTime  = Math.round(results.reduce((s,r) => s + (r.time_taken||0), 0) / total);
+
+  // By type
+  const byType = {};
+  results.forEach(r => {
+    const t = r.question_type || 'direct';
+    if (!byType[t]) byType[t] = { c: 0, t: 0 };
+    byType[t].t++;
+    if (r.correct) byType[t].c++;
+  });
+
+  // By difficulty
+  const byDiff = {};
+  results.forEach(r => {
+    const d = r.difficulty || 1;
+    if (!byDiff[d]) byDiff[d] = { c: 0, t: 0 };
+    byDiff[d].t++;
+    if (r.correct) byDiff[d].c++;
+  });
+
+  // By tag
+  const byTag = {};
+  results.forEach(r => {
+    (r.tags || []).forEach(tag => {
+      if (!byTag[tag]) byTag[tag] = { c: 0, t: 0 };
+      byTag[tag].t++;
+      if (r.correct) byTag[tag].c++;
+    });
+  });
+
+  // ── Render ──
+  const typeColors  = { direct: '#60a5fa', statement: '#c084fc', infer: '#fb923c' };
+  const typeLabels  = { direct: 'Direct', statement: 'Statement', infer: 'Inference' };
+  const diffLabels  = { 1:'D1 — Direct fact', 2:'D2 — Statement (old)', 3:'D3 — Statement (new)', 4:'D4 — Inference' };
+  const diffColors  = { 1:'#4ade80', 2:'#60a5fa', 3:'#c084fc', 4:'#fb923c' };
+
+  const scoreClass = pct >= 70 ? '#6adf6a' : pct >= 40 ? '#d4a060' : '#ff8a8a';
+
+  const typeBars = Object.entries(byType).map(([type, s]) => {
+    const p = Math.round((s.c / s.t) * 100);
+    const col = typeColors[type] || '#887fa0';
+    return `<div class="qa-bar-row">
+      <span class="qa-bar-label">${typeLabels[type]||type}</span>
+      <div class="qa-bar-track"><div class="qa-bar-fill" style="width:${p}%;background:${col};"></div></div>
+      <span class="qa-bar-pct" style="color:${col};">${p}%</span>
+      <span class="qa-bar-count">${s.c}/${s.t}</span>
+    </div>`;
+  }).join('');
+
+  const diffBars = [1,2,3,4].filter(d => byDiff[d]).map(d => {
+    const s = byDiff[d];
+    const p = Math.round((s.c / s.t) * 100);
+    const col = diffColors[d];
+    return `<div class="qa-bar-row">
+      <span class="qa-bar-label">${diffLabels[d]}</span>
+      <div class="qa-bar-track"><div class="qa-bar-fill" style="width:${p}%;background:${col};"></div></div>
+      <span class="qa-bar-pct" style="color:${col};">${p}%</span>
+      <span class="qa-bar-count">${s.c}/${s.t}</span>
+    </div>`;
+  }).join('');
+
+  const tagBars = Object.entries(byTag)
+    .sort((a,b) => b[1].t - a[1].t)
+    .map(([key, s]) => {
+      const cat = window.HL_CAT_MAP && window.HL_CAT_MAP[key];
+      const label = cat ? cat.label : key;
+      const col = cat ? cat.color : '#887fa0';
+      const p = Math.round((s.c / s.t) * 100);
+      return `<div class="qa-bar-row">
+        <span class="qa-bar-label">✦ ${escHtml(label)}</span>
+        <div class="qa-bar-track"><div class="qa-bar-fill" style="width:${p}%;background:${col};"></div></div>
+        <span class="qa-bar-pct" style="color:${col};">${p}%</span>
+        <span class="qa-bar-count">${s.c}/${s.t}</span>
+      </div>`;
+    }).join('');
+
+  // Per-book breakdown when viewing all
+  let bookBreakdownHTML = '';
+  if (filterBook === 'all') {
+    const byBook = {};
+    results.forEach(r => {
+      if (!byBook[r.book_id]) byBook[r.book_id] = { c: 0, t: 0, name: r.book_id };
+      byBook[r.book_id].t++;
+      if (r.correct) byBook[r.book_id].c++;
+    });
+    // Enrich with book names
+    window.library.forEach(b => { if (byBook[b.id]) byBook[b.id].name = b.name; });
+    const bookRows = Object.values(byBook).sort((a,b) => b.t - a.t).map(s => {
+      const p = Math.round((s.c / s.t) * 100);
+      const col = p >= 70 ? '#6adf6a' : p >= 40 ? '#d4a060' : '#ff8a8a';
+      return `<div class="qa-bar-row">
+        <span class="qa-bar-label">${escHtml((s.name||'').substring(0,20))}</span>
+        <div class="qa-bar-track"><div class="qa-bar-fill" style="width:${p}%;background:${col};"></div></div>
+        <span class="qa-bar-pct" style="color:${col};">${p}%</span>
+        <span class="qa-bar-count">${s.c}/${s.t}</span>
+      </div>`;
+    }).join('');
+    if (bookRows) bookBreakdownHTML = `
+      <div style="margin-bottom:2rem;">
+        <div class="analytics-section-title" style="font-size:18px;margin-bottom:0.5rem;">By Book</div>
+        ${bookRows}
+      </div>`;
+  }
+
+  // Per-chapter breakdown when a book is selected
+  let chapterBreakdownHTML = '';
+  if (filterBook !== 'all' && filterChapter === 'all') {
+    const byCh = {};
+    results.forEach(r => {
+      if (!byCh[r.chapter_id]) byCh[r.chapter_id] = { c: 0, t: 0, name: r.chapter_id };
+      byCh[r.chapter_id].t++;
+      if (r.correct) byCh[r.chapter_id].c++;
+    });
+    const book = window.library.find(b => b.id === filterBook);
+    if (book) {
+      (book.treeData || []).forEach(ch => {
+        if (byCh[ch.id]) byCh[ch.id].name = ch.name;
+      });
+    }
+    const chRows = Object.values(byCh).sort((a,b) => b.t - a.t).map(s => {
+      const p = Math.round((s.c / s.t) * 100);
+      const col = p >= 70 ? '#6adf6a' : p >= 40 ? '#d4a060' : '#ff8a8a';
+      return `<div class="qa-bar-row">
+        <span class="qa-bar-label">${escHtml((s.name||'').substring(0,22))}</span>
+        <div class="qa-bar-track"><div class="qa-bar-fill" style="width:${p}%;background:${col};"></div></div>
+        <span class="qa-bar-pct" style="color:${col};">${p}%</span>
+        <span class="qa-bar-count">${s.c}/${s.t}</span>
+      </div>`;
+    }).join('');
+    if (chRows) chapterBreakdownHTML = `
+      <div style="margin-bottom:2rem;">
+        <div class="analytics-section-title" style="font-size:18px;margin-bottom:0.5rem;">By Chapter</div>
+        ${chRows}
+      </div>`;
+  }
+
+  // Per-topic breakdown when a chapter is selected
+  let topicBreakdownHTML = '';
+  if (filterChapter !== 'all' && filterTopic === 'all') {
+    const byTp = {};
+    results.forEach(r => {
+      if (!byTp[r.topic_id]) byTp[r.topic_id] = { c: 0, t: 0, name: r.topic_id };
+      byTp[r.topic_id].t++;
+      if (r.correct) byTp[r.topic_id].c++;
+    });
+    const book = window.library.find(b => b.id === filterBook);
+    if (book) {
+      (book.treeData || []).forEach(ch => {
+        (ch.topics || []).forEach(tp => {
+          if (byTp[tp.id]) byTp[tp.id].name = tp.name;
+        });
+      });
+    }
+    const tpRows = Object.values(byTp).sort((a,b) => b.t - a.t).map(s => {
+      const p = Math.round((s.c / s.t) * 100);
+      const col = p >= 70 ? '#6adf6a' : p >= 40 ? '#d4a060' : '#ff8a8a';
+      return `<div class="qa-bar-row">
+        <span class="qa-bar-label">${escHtml((s.name||'').substring(0,22))}</span>
+        <div class="qa-bar-track"><div class="qa-bar-fill" style="width:${p}%;background:${col};"></div></div>
+        <span class="qa-bar-pct" style="color:${col};">${p}%</span>
+        <span class="qa-bar-count">${s.c}/${s.t}</span>
+      </div>`;
+    }).join('');
+    if (tpRows) topicBreakdownHTML = `
+      <div style="margin-bottom:2rem;">
+        <div class="analytics-section-title" style="font-size:18px;margin-bottom:0.5rem;">By Topic</div>
+        ${tpRows}
+      </div>`;
+  }
+
+  content.innerHTML = `
+    <div class="qa-stat-grid">
+      <div class="qa-stat-card">
+        <div class="qa-stat-val" style="color:${scoreClass};">${pct}%</div>
+        <div class="qa-stat-lbl">Overall Score</div>
+      </div>
+      <div class="qa-stat-card">
+        <div class="qa-stat-val">${total}</div>
+        <div class="qa-stat-lbl">Attempted</div>
+      </div>
+      <div class="qa-stat-card">
+        <div class="qa-stat-val">${correct}</div>
+        <div class="qa-stat-lbl">Correct</div>
+      </div>
+      <div class="qa-stat-card">
+        <div class="qa-stat-val">${avgTime}s</div>
+        <div class="qa-stat-lbl">Avg Time/Q</div>
+      </div>
+    </div>
+
+    ${bookBreakdownHTML}
+    ${chapterBreakdownHTML}
+    ${topicBreakdownHTML}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin-bottom:2rem;">
+      <div>
+        <div class="analytics-section-title" style="font-size:18px;margin-bottom:0.8rem;">By Question Type</div>
+        ${typeBars || '<div class="analytics-empty">No data</div>'}
+      </div>
+      <div>
+        <div class="analytics-section-title" style="font-size:18px;margin-bottom:0.8rem;">By Difficulty</div>
+        ${diffBars || '<div class="analytics-empty">No data</div>'}
+      </div>
+    </div>
+
+    ${tagBars ? `
+      <div style="margin-bottom:2rem;">
+        <div class="analytics-section-title" style="font-size:18px;margin-bottom:0.8rem;">By Category (Tags)</div>
+        ${tagBars}
+      </div>` : ''}
+  `;
+}
+
 window.openAnalytics = openAnalytics;
 window.closeAnalytics = closeAnalytics;
 window.confirmPage = confirmPage;
 window.unconfirmPage = unconfirmPage;
 window.confirmAllUnconfirmed = confirmAllUnconfirmed;
 window.confirmFromFilter = confirmFromFilter;
+window.renderQuestionsAnalytics = renderQuestionsAnalytics;
+window._qaRenderContent = _qaRenderContent;
