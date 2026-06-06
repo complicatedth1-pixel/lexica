@@ -418,7 +418,7 @@ function openTestingScreen(tp, questions) {
         <div class="ts-topic-name">${escHtml(tp.name)}${ch ? ' · ' + escHtml(ch.name) : ''}</div>
       </div>
       <div class="ts-topbar-right">
-        <div class="ts-score-pill" id="tsScorePill">0 / ${questions.length}</div>
+        <div class="ts-score-pill" id="tsScorePill">0 / ${questions.length} marked</div>
         <button class="ts-close-btn" onclick="closeTestingScreen()">✕ Exit</button>
       </div>
     </div>
@@ -470,7 +470,19 @@ function _renderPalette() {
   palette.innerHTML = '';
   _qSession.questions.forEach((q, i) => {
     const btn = document.createElement('button');
-    btn.className = 'ts-palette-btn' + (i === _qSession.current ? ' active' : '');
+    let cls = 'ts-palette-btn';
+    if (i === _qSession.current) cls += ' active';
+    
+    if (_qSession.submitted) {
+      // After submit show correct/wrong
+      const r = _qSession.results[i];
+      if (r !== undefined) cls += r.correct ? ' answered-correct' : ' answered-wrong';
+    } else {
+      // Before submit just show as attempted (amber)
+      if (_qSession.results[i] !== undefined) cls += ' attempted';
+    }
+    
+    btn.className = cls;
     btn.id = `tsPalBtn_${i}`;
     btn.textContent = i + 1;
     btn.title = (q.text || '').substring(0, 60);
@@ -504,7 +516,8 @@ function _renderQuestion(idx) {
   _qSession.current = idx;
   const q = _qSession.questions[idx];
   const existing = _qSession.results[idx];
-  const answered = existing !== undefined;
+  const attempted = existing !== undefined;
+  const submitted = _qSession.submitted === true;
 
   if (_qSession.timerInterval) {
     clearInterval(_qSession.timerInterval);
@@ -530,11 +543,17 @@ function _renderQuestion(idx) {
 
   const optionsHTML = (q.options || []).map((opt, i) => {
     let cls = 'ts-q-option';
-    if (answered) {
+    
+    if (submitted && attempted) {
+      // Show correct/wrong after submission
       cls += ' disabled';
       if (i === q.correct) cls += ' correct';
       else if (i === existing.chosen) cls += ' wrong';
+    } else if (attempted && !submitted) {
+      // Show selected before submission
+      cls += (i === existing.chosen) ? ' selected' : '';
     }
+    
     return `<div class="${cls}" data-idx="${i}">
       <span class="ts-q-option-label">${labels[i]}</span>
       <span>${escHtml(opt)}</span>
@@ -543,58 +562,103 @@ function _renderQuestion(idx) {
 
   const xp = q.profile && q.profile.xp ? q.profile.xp : 60;
 
+  // Bottom action bar
+  let actionsHTML = '';
+  if (submitted) {
+    // Review mode — just next/prev
+    actionsHTML = `
+      <div class="ts-q-actions">
+        ${idx > 0 ? `<button class="ts-submit-btn" onclick="qGoTo(${idx-1})">← Prev</button>` : ''}
+        ${idx < _qSession.questions.length - 1 
+          ? `<button class="ts-next-btn visible" onclick="qGoTo(${idx+1})">Next →</button>`
+          : `<button class="ts-next-btn visible" onclick="qShowResults()">Results →</button>`}
+      </div>`;
+  } else {
+    const allAttempted = _qSession.questions.every((_, i) => _qSession.results[i] !== undefined);
+    actionsHTML = `
+      <div class="ts-q-actions">
+        ${idx > 0 ? `<button class="ts-submit-btn" onclick="qGoTo(${idx-1})">← Prev</button>` : ''}
+        ${idx < _qSession.questions.length - 1 
+          ? `<button class="ts-next-btn visible" onclick="qGoTo(${idx+1})">Next →</button>` 
+          : ''}
+        ${allAttempted 
+          ? `<button class="ts-submit-btn" style="background:rgba(90,200,90,0.15);border-color:rgba(90,200,90,0.4);color:#6adf6a;" onclick="qFinalSubmit()">✓ Submit Test</button>`
+          : `<button class="ts-submit-btn" onclick="qFinalSubmit()" style="opacity:0.5;" title="Answer all questions to submit">Submit Test</button>`}
+      </div>`;
+  }
+
   view.innerHTML = `
     <div class="ts-q-meta">
       <span class="ts-q-num">Q${idx + 1} of ${_qSession.questions.length}</span>
       <span class="ts-q-type-badge ${typeBadge}">${typeLabel}</span>
       <span class="ts-q-difficulty">${diffDots}</span>
-      ${answered ? '' : `<span class="ts-q-timer" id="tsTimer">${_qSession.qElapsed[idx]}s</span>`}
+      ${!submitted && !attempted ? `<span class="ts-q-timer" id="tsTimer">${_qSession.qElapsed[idx]}s</span>` : ''}
+      ${!submitted && attempted ? `<span style="font-size:11px;color:#e8b87a;font-family:sans-serif;">✓ Marked</span>` : ''}
     </div>
 
     <div class="ts-q-stem">${escHtml(q.text || '')}</div>
     ${statementsHTML}
     <div class="ts-q-options" id="tsOptions">${optionsHTML}</div>
 
-    <div class="ts-q-reason${answered ? ' visible' : ''}" id="tsReason">
+    <div class="ts-q-reason${submitted && attempted ? ' visible' : ''}" id="tsReason">
       <div class="ts-q-reason-label">Explanation</div>
       ${escHtml(q.reason || '')}
     </div>
 
-    <div class="ts-q-time-row${answered ? ' visible' : ''}" id="tsTimeRow"></div>
+    ${submitted && attempted ? `
+    <div class="ts-q-time-row visible" id="tsTimeRow">
+      <span>Time: <strong>${existing.time_taken}s</strong></span>
+      <span style="color:#554e68;">/ expected ${xp}s</span>
+      <span class="${existing.time_taken < xp * 0.85 ? 'ts-q-time-fast' : 'ts-q-time-slow'}">
+        ${existing.time_taken < xp * 0.85 ? '⚡ Fast' : '🐢 Slow'}
+      </span>
+    </div>` : ''}
 
-    <div class="ts-q-actions">
-      <button class="ts-submit-btn" id="tsSubmitBtn" ${answered ? 'disabled' : ''} onclick="qSubmitAnswer()">
-        ${answered ? '✓ Answered' : 'Submit'}
-      </button>
-      <button class="ts-next-btn${answered && idx < _qSession.questions.length - 1 ? ' visible' : ''}" id="tsNextBtn" onclick="qNextQuestion()">
-        Next →
-      </button>
-      ${answered && idx === _qSession.questions.length - 1 ? `<button class="ts-next-btn visible" onclick="qShowResults()">See Results →</button>` : ''}
-    </div>
+    ${actionsHTML}
   `;
 
-  if (!answered) {
+  // Wire option clicks — only if not submitted
+  if (!submitted) {
     view.querySelectorAll('.ts-q-option').forEach(el => {
       el.addEventListener('click', () => {
-        view.querySelectorAll('.ts-q-option').forEach(o => o.classList.remove('selected'));
-        el.classList.add('selected');
+        if (_qSession.timerInterval) {
+          clearInterval(_qSession.timerInterval);
+          _qSession.timerInterval = null;
+        }
+        // Mark answer locally immediately
+        const chosen = parseInt(el.dataset.idx);
+        _qSession.results[idx] = {
+          session_id:       _qSession.sessionId,
+          book_id:          _qSession.bookId,
+          chapter_id:       _qSession.chapterId,
+          topic_id:         _qSession.topicId,
+          question_id:      q.id || ('q_' + idx),
+          question_index:   idx,
+          question_type:    q.type || 'direct',
+          question_subtype: q.subtype || null,
+          tags:             q.tags || [],
+          difficulty:       q.difficulty || 1,
+          profile_i:        q.profile ? q.profile.i : null,
+          profile_wm:       q.profile ? q.profile.wm : null,
+          profile_xp:       q.profile ? q.profile.xp : null,
+          time_taken:       _qSession.qElapsed[idx],
+          correct:          chosen === q.correct,
+          chosen
+        };
+
+        // Update score pill
+        const attempted_count = _qSession.results.filter(r => r !== undefined).length;
+        const pill = document.getElementById('tsScorePill');
+        if (pill) pill.textContent = `${attempted_count} / ${_qSession.questions.length} marked`;
+
+        // Re-render to show marked state + update palette
+        _renderQuestion(idx);
       });
     });
   }
 
-  if (answered) {
-    const timeRow = document.getElementById('tsTimeRow');
-    if (timeRow) {
-      const fast = existing.time_taken < xp * 0.85;
-      timeRow.innerHTML = `
-        <span>Time: <strong>${existing.time_taken}s</strong></span>
-        <span style="color:#554e68;">/ expected ${xp}s</span>
-        <span class="${fast ? 'ts-q-time-fast' : 'ts-q-time-slow'}">${fast ? '⚡ Fast' : '🐢 Slow'}</span>
-      `;
-    }
-  }
-
-  if (!answered) {
+  // Timer — only for unanswered, unsubmitted
+  if (!submitted && !attempted) {
     let elapsed = _qSession.qElapsed[idx];
     const timerEl = document.getElementById('tsTimer');
     if (timerEl) timerEl.textContent = elapsed + 's';
@@ -615,7 +679,40 @@ function _renderQuestion(idx) {
 
   _updatePalette();
 }
+// New helper for navigation
+function qGoTo(idx) {
+  if (!_qSession) return;
+  if (_qSession.timerInterval) {
+    clearInterval(_qSession.timerInterval);
+    _qSession.timerInterval = null;
+  }
+  _renderQuestion(idx);
+}
 
+// Final submit — saves to Supabase and enters review mode
+async function qFinalSubmit() {
+  if (!_qSession) return;
+  if (_qSession.timerInterval) {
+    clearInterval(_qSession.timerInterval);
+    _qSession.timerInterval = null;
+  }
+
+  _qSession.submitted = true;
+
+  // Save to Supabase
+  const toSave = _qSession.results.filter(r => r !== undefined);
+  await qSaveResults(toSave);
+
+  // Update topbar
+  const correct_count = toSave.filter(r => r.correct).length;
+  const pill = document.getElementById('tsScorePill');
+  if (pill) pill.textContent = `${correct_count} / ${toSave.length} correct`;
+
+  // Re-render current question in review mode
+  _renderQuestion(_qSession.current);
+
+  if (typeof showToast === 'function') showToast(`Submitted — ${correct_count}/${toSave.length} correct`);
+}
 function qSubmitAnswer() {
   if (!_qSession) return;
   const idx = _qSession.current;
@@ -825,3 +922,5 @@ window.qShowResults        = qShowResults;
 window.closeTestingScreen  = closeTestingScreen;
 window.injectTestButton    = injectTestButton;
 window.qLoadResults        = qLoadResults;
+window.qGoTo        = qGoTo;
+window.qFinalSubmit = qFinalSubmit;

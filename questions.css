@@ -409,7 +409,11 @@
   background: rgba(255, 255, 255, 0.1);
   color: #f0e8d8;
 }
-
+.ts-palette-btn.attempted {
+  background: rgba(212, 135, 42, 0.15);
+  border-color: rgba(212, 135, 42, 0.4);
+  color: #e8b87a;
+}
 .ts-palette-btn.active {
   border-color: rgba(212, 135, 42, 0.6);
   background: rgba(212, 135, 42, 0.15);
