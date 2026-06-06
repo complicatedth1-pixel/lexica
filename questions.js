@@ -389,13 +389,75 @@ function _setCachedQuestions(topicId, qs) { _qCache[topicId] = qs; }
 function _cachedQuestionsForTopic(topicId) { return _qCache[topicId] || null; }
 
 // ── Testing Screen ────────────────────────────────────
-function openTestingScreen(tp, questions) {
+async function openTestingScreen(tp, questions) {
   const screen = document.getElementById('testingScreen');
   if (!screen) return;
 
   const ch = _getChapterForTopic(tp.id);
   const book = window.library.find(b => b.id === window.activeBookId);
-  const sessionId = 'ses_' + Math.random().toString(36).slice(2, 10);
+
+  // Load last session results from Supabase
+  const lastResults = await qLoadResults({ topic_id: tp.id, limit: questions.length * 3 });
+
+  // Group by session_id, find most recent session
+  const sessionMap = {};
+  lastResults.forEach(r => {
+    if (!r.session_id) return;
+    if (!sessionMap[r.session_id]) sessionMap[r.session_id] = [];
+    sessionMap[r.session_id].push(r);
+  });
+
+  const sessionIds = Object.keys(sessionMap);
+  let lastSession = null;
+  if (sessionIds.length > 0) {
+    // Most recent session = the one whose results were created last
+    sessionIds.sort((a, b) => {
+      const aTime = Math.max(...sessionMap[a].map(r => new Date(r.created_at).getTime()));
+      const bTime = Math.max(...sessionMap[b].map(r => new Date(r.created_at).getTime()));
+      return bTime - aTime;
+    });
+    lastSession = sessionMap[sessionIds[0]];
+  }
+
+  // Determine if last session was submitted
+  // A session is "submitted" if it has results for ALL questions
+  const wasSubmitted = lastSession && lastSession.length >= questions.length;
+
+  // Build session id — reuse last if resuming, new if submitted or no prior
+  const sessionId = (lastSession && !wasSubmitted)
+    ? lastSession[0].session_id
+    : 'ses_' + Math.random().toString(36).slice(2, 10);
+
+  // Rebuild results array from last session
+  const restoredResults = new Array(questions.length).fill(undefined);
+  const restoredElapsed = new Array(questions.length).fill(0);
+
+  if (lastSession) {
+    lastSession.forEach(r => {
+      const idx = r.question_index;
+      if (idx === undefined || idx === null) return;
+      if (idx >= questions.length) return;
+      restoredResults[idx] = {
+        session_id:       r.session_id,
+        book_id:          r.book_id,
+        chapter_id:       r.chapter_id,
+        topic_id:         r.topic_id,
+        question_id:      r.question_id,
+        question_index:   r.question_index,
+        question_type:    r.question_type,
+        question_subtype: r.question_subtype,
+        tags:             r.tags || [],
+        difficulty:       r.difficulty || 1,
+        profile_i:        r.profile_i,
+        profile_wm:       r.profile_wm,
+        profile_xp:       r.profile_xp,
+        time_taken:       r.time_taken || 0,
+        correct:          r.correct,
+        chosen:           r.chosen
+      };
+      restoredElapsed[idx] = r.time_taken || 0;
+    });
+  }
 
   _qSession = {
     sessionId,
@@ -404,22 +466,33 @@ function openTestingScreen(tp, questions) {
     bookId:        book ? book.id : '',
     questions,
     current:       0,
-    results:       [],
+    results:       restoredResults,
     startTime:     Date.now(),
     qStartTime:    Date.now(),
-    qElapsed:      new Array(questions.length).fill(0),
-    submitted:     false,
+    qElapsed:      restoredElapsed,
+    submitted:     wasSubmitted,
     timerInterval: null
   };
+
+  // Find first unanswered question to start at (if resuming)
+  let startIdx = 0;
+  if (!wasSubmitted && lastSession) {
+    const firstUnanswered = restoredResults.findIndex(r => r === undefined);
+    startIdx = firstUnanswered === -1 ? 0 : firstUnanswered;
+  }
 
   screen.innerHTML = `
     <div class="ts-topbar">
       <div class="ts-topbar-left">
-        <div class="ts-title">✦ Test</div>
+        <div class="ts-title">${wasSubmitted ? '✦ Review' : '✦ Test'}</div>
         <div class="ts-topic-name">${escHtml(tp.name)}${ch ? ' · ' + escHtml(ch.name) : ''}</div>
       </div>
       <div class="ts-topbar-right">
-        <div class="ts-score-pill" id="tsScorePill">0 / ${questions.length} marked</div>
+        <div class="ts-score-pill" id="tsScorePill">${
+          wasSubmitted
+            ? `${restoredResults.filter(r => r && r.correct).length} / ${questions.length} correct`
+            : `${restoredResults.filter(r => r !== undefined).length} / ${questions.length} marked`
+        }</div>
         <button class="ts-close-btn" onclick="closeTestingScreen()">✕ Exit</button>
       </div>
     </div>
@@ -435,20 +508,16 @@ function openTestingScreen(tp, questions) {
     </div>
   `;
 
-  // ── Fill content panel ──
+  // Fill content panel
   const contentEl = screen.querySelector('#tsContentInner');
   if (tp.sections) {
     tp.sections.forEach(s => {
       if (s.content && s.content.trim()) {
         const div = document.createElement('div');
         div.innerHTML = s.content;
-
-        // Strip highlight spans
         div.querySelectorAll('[class^="hl-span-"], [data-hl-cat]').forEach(el => {
           el.replaceWith(document.createTextNode(el.textContent));
         });
-
-        // Flatten tables — each cell becomes a paragraph
         div.querySelectorAll('table').forEach(table => {
           const cells = Array.from(table.querySelectorAll('td, th'));
           const frag = document.createDocumentFragment();
@@ -461,25 +530,22 @@ function openTestingScreen(tp, questions) {
           });
           table.replaceWith(frag);
         });
-
-        // Strip column/grid/float styles
         div.querySelectorAll('*').forEach(el => {
-          el.style.columnCount         = '';
-          el.style.columns             = '';
-          el.style.float               = '';
-          el.style.display             = '';
+          el.style.columnCount = '';
+          el.style.columns = '';
+          el.style.float = '';
+          el.style.display = '';
           el.style.gridTemplateColumns = '';
-          el.style.width               = '';
-          el.style.maxWidth            = '';
+          el.style.width = '';
+          el.style.maxWidth = '';
         });
-
         contentEl.appendChild(div);
       }
     });
   }
 
   _renderPalette();
-  _renderQuestion(0);
+  _renderQuestion(startIdx);
   screen.classList.add('open');
 }
 
