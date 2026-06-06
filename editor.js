@@ -622,7 +622,6 @@ function handleEditorPaste(e, editorEl, secObj) {
         const range = sel.getRangeAt(0); range.deleteContents(); range.insertNode(img);
         range.setStartAfter(img); range.collapse(true); sel.removeAllRanges(); sel.addRange(range);
       } else { editorEl.appendChild(img); }
-      // FIX: wait for DOM to update before reading innerHTML back
       requestAnimationFrame(() => {
         const liveSec = _getLiveSec(editorEl.dataset.sid);
         if (liveSec) liveSec.content = editorEl.innerHTML;
@@ -637,12 +636,28 @@ function handleEditorPaste(e, editorEl, secObj) {
   const html = cd.getData('text/html');
   if (html) {
     e.preventDefault();
-    const tmp = document.createElement('div'); tmp.innerHTML = html;
-    tmp.querySelectorAll('img').forEach(img => { img.style.maxWidth = '100%'; img.style.height = 'auto'; img.removeAttribute('width'); img.removeAttribute('height'); });
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+
+    // Fix: lists rendered as flex causes horizontal column layout
+    tmp.querySelectorAll('ul, ol').forEach(el => {
+      el.style.display = '';
+    });
+
+    tmp.querySelectorAll('img').forEach(img => {
+      img.style.maxWidth = '100%'; img.style.height = 'auto';
+      img.removeAttribute('width'); img.removeAttribute('height');
+    });
+
     tmp.querySelectorAll('table').forEach(tbl => {
       tbl.style.borderCollapse = 'collapse'; tbl.style.width = '100%'; tbl.style.fontSize = '13px';
-      tbl.querySelectorAll('td, th').forEach(cell => { cell.style.border = '1px solid rgba(100,80,40,0.3)'; cell.style.padding = '4px 8px'; cell.style.wordBreak = 'break-word'; });
+      tbl.querySelectorAll('td, th').forEach(cell => {
+        cell.style.border = '1px solid rgba(100,80,40,0.3)';
+        cell.style.padding = '4px 8px';
+        cell.style.wordBreak = 'break-word';
+      });
     });
+
     const frag = document.createDocumentFragment();
     while (tmp.firstChild) frag.appendChild(tmp.firstChild);
     const sel = window.getSelection();
