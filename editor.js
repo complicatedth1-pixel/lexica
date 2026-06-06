@@ -639,9 +639,17 @@ function handleEditorPaste(e, editorEl, secObj) {
     const tmp = document.createElement('div');
     tmp.innerHTML = html;
 
-    // Remove all inline styles — Gemini/AI pastes full computed styles on every element
-    // Tags (h3, h4, ul, li, strong, em etc) carry the formatting, not inline styles
+    // Remove all inline styles — AI tools paste full computed styles
     tmp.querySelectorAll('*').forEach(el => el.removeAttribute('style'));
+
+    // Remove empty p tags and lone br tags causing excess spacing
+    tmp.querySelectorAll('p > br:only-child, p:empty').forEach(el => el.remove());
+
+    // Unwrap Angular/AI wrapper divs, keep their children
+    tmp.querySelectorAll('div[inline-copy-host], div[_ngcontent-ng-c1789272294]').forEach(wrapper => {
+      while (wrapper.firstChild) wrapper.parentNode.insertBefore(wrapper.firstChild, wrapper);
+      wrapper.remove();
+    });
 
     // Re-apply sensible styles to images
     tmp.querySelectorAll('img').forEach(img => {
