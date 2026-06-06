@@ -639,16 +639,17 @@ function handleEditorPaste(e, editorEl, secObj) {
     const tmp = document.createElement('div');
     tmp.innerHTML = html;
 
-    // Fix: lists rendered as flex causes horizontal column layout
-    tmp.querySelectorAll('ul, ol').forEach(el => {
-      el.style.display = '';
-    });
+    // Remove all inline styles — Gemini/AI pastes full computed styles on every element
+    // Tags (h3, h4, ul, li, strong, em etc) carry the formatting, not inline styles
+    tmp.querySelectorAll('*').forEach(el => el.removeAttribute('style'));
 
+    // Re-apply sensible styles to images
     tmp.querySelectorAll('img').forEach(img => {
       img.style.maxWidth = '100%'; img.style.height = 'auto';
       img.removeAttribute('width'); img.removeAttribute('height');
     });
 
+    // Re-apply sensible styles to tables
     tmp.querySelectorAll('table').forEach(tbl => {
       tbl.style.borderCollapse = 'collapse'; tbl.style.width = '100%'; tbl.style.fontSize = '13px';
       tbl.querySelectorAll('td, th').forEach(cell => {
