@@ -10,7 +10,7 @@
 .topic-test-btn {
   background: rgba(212, 135, 42, 0.12);
   border: 1px solid rgba(212, 135, 42, 0.35);
-  color: #d4a060;
+  color: #e8b87a;
   font-family: 'Outfit', sans-serif;
   font-size: 13px;
   font-weight: 600;
@@ -31,7 +31,7 @@
 .topic-test-btn.has-questions {
   background: rgba(160, 130, 220, 0.12);
   border-color: rgba(160, 130, 220, 0.35);
-  color: #c8b8e8;
+  color: #ddd0f5;
 }
 
 .topic-test-btn.has-questions:hover {
@@ -132,7 +132,7 @@
 .qmodal-btn {
   background: rgba(160, 130, 220, 0.12);
   border: 1px solid rgba(160, 130, 220, 0.3);
-  color: #c8b8e8;
+  color: #ddd0f5;
   font-family: 'Outfit', sans-serif;
   font-size: 12px;
   font-weight: 500;

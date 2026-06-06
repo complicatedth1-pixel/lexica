@@ -367,7 +367,7 @@ async function injectTestButton() {
   manageLink.id = 'topicManageQBtn';
   manageLink.className = 'qmodal-btn';
   manageLink.textContent = '⚙ Manage';
-  manageLink.style.cssText = 'margin-left:10px;font-size:11px;padding:5px 12px;display:none;';
+  manageLink.style.cssText = 'margin-left:10px;font-size:11px;padding:5px 12px;display:none;color:#ddd0f5;';
   manageLink.addEventListener('click', () => openQuestionsModal());
   wrap.appendChild(manageLink);
 
@@ -399,18 +399,18 @@ function openTestingScreen(tp, questions) {
 
   _qSession = {
     sessionId,
-    topicId:     tp.id,
-    chapterId:   ch ? ch.id : '',
-    bookId:      book ? book.id : '',
+    topicId:       tp.id,
+    chapterId:     ch ? ch.id : '',
+    bookId:        book ? book.id : '',
     questions,
-    current:     0,
-    results:     [],
-    startTime:   Date.now(),
-    qStartTime:  Date.now(),
+    current:       0,
+    results:       [],
+    startTime:     Date.now(),
+    qStartTime:    Date.now(),
+    qElapsed:      new Array(questions.length).fill(0),
     timerInterval: null
   };
 
-  // Build DOM
   screen.innerHTML = `
     <div class="ts-topbar">
       <div class="ts-topbar-left">
@@ -434,14 +434,12 @@ function openTestingScreen(tp, questions) {
     </div>
   `;
 
-  // Fill content
   const contentEl = screen.querySelector('#tsContentInner');
   if (tp.sections) {
     tp.sections.forEach(s => {
       if (s.content && s.content.trim()) {
         const div = document.createElement('div');
         div.innerHTML = s.content;
-        // Remove highlight spans for clean reading
         div.querySelectorAll('[class^="hl-span-"], [data-hl-cat]').forEach(el => {
           const txt = document.createTextNode(el.textContent);
           el.replaceWith(txt);
@@ -451,12 +449,8 @@ function openTestingScreen(tp, questions) {
     });
   }
 
-  // Build palette
   _renderPalette();
-
-  // Load first question
   _renderQuestion(0);
-
   screen.classList.add('open');
 }
 
@@ -481,9 +475,11 @@ function _renderPalette() {
     btn.textContent = i + 1;
     btn.title = (q.text || '').substring(0, 60);
     btn.addEventListener('click', () => {
-      if (_qSession.results[i] !== undefined) {
-        _renderQuestion(i);
+      if (_qSession.timerInterval) {
+        clearInterval(_qSession.timerInterval);
+        _qSession.timerInterval = null;
       }
+      _renderQuestion(i);
     });
     palette.appendChild(btn);
   });
@@ -510,8 +506,10 @@ function _renderQuestion(idx) {
   const existing = _qSession.results[idx];
   const answered = existing !== undefined;
 
-  // Reset timer
-  if (_qSession.timerInterval) clearInterval(_qSession.timerInterval);
+  if (_qSession.timerInterval) {
+    clearInterval(_qSession.timerInterval);
+    _qSession.timerInterval = null;
+  }
   _qSession.qStartTime = Date.now();
 
   const view = document.getElementById('tsQView');
@@ -550,7 +548,7 @@ function _renderQuestion(idx) {
       <span class="ts-q-num">Q${idx + 1} of ${_qSession.questions.length}</span>
       <span class="ts-q-type-badge ${typeBadge}">${typeLabel}</span>
       <span class="ts-q-difficulty">${diffDots}</span>
-      ${answered ? '' : `<span class="ts-q-timer" id="tsTimer">0s</span>`}
+      ${answered ? '' : `<span class="ts-q-timer" id="tsTimer">${_qSession.qElapsed[idx]}s</span>`}
     </div>
 
     <div class="ts-q-stem">${escHtml(q.text || '')}</div>
@@ -575,7 +573,6 @@ function _renderQuestion(idx) {
     </div>
   `;
 
-  // Wire option clicks (only if not answered)
   if (!answered) {
     view.querySelectorAll('.ts-q-option').forEach(el => {
       el.addEventListener('click', () => {
@@ -585,7 +582,6 @@ function _renderQuestion(idx) {
     });
   }
 
-  // Show time info if answered
   if (answered) {
     const timeRow = document.getElementById('tsTimeRow');
     if (timeRow) {
@@ -598,13 +594,20 @@ function _renderQuestion(idx) {
     }
   }
 
-  // Start timer if not answered
   if (!answered) {
-    let elapsed = 0;
+    let elapsed = _qSession.qElapsed[idx];
+    const timerEl = document.getElementById('tsTimer');
+    if (timerEl) timerEl.textContent = elapsed + 's';
+
     _qSession.timerInterval = setInterval(() => {
       elapsed++;
+      _qSession.qElapsed[idx] = elapsed;
       const timerEl = document.getElementById('tsTimer');
-      if (!timerEl) { clearInterval(_qSession.timerInterval); return; }
+      if (!timerEl) {
+        clearInterval(_qSession.timerInterval);
+        _qSession.timerInterval = null;
+        return;
+      }
       timerEl.textContent = elapsed + 's';
       if (elapsed > xp * 1.5) timerEl.classList.add('warn');
     }, 1000);
@@ -628,36 +631,35 @@ function qSubmitAnswer() {
 
   const chosen = parseInt(selected.dataset.idx);
   const correct = chosen === q.correct;
-  const timeTaken = Math.round((Date.now() - _qSession.qStartTime) / 1000);
 
-  if (_qSession.timerInterval) clearInterval(_qSession.timerInterval);
+  if (_qSession.timerInterval) {
+    clearInterval(_qSession.timerInterval);
+    _qSession.timerInterval = null;
+  }
 
-  const book = window.library.find(b => b.id === window.activeBookId);
-  const ch = _getChapterForTopic(_qSession.topicId);
+  const timeTaken = _qSession.qElapsed[idx];
 
   _qSession.results[idx] = {
-    session_id:      _qSession.sessionId,
-    book_id:         _qSession.bookId,
-    chapter_id:      _qSession.chapterId,
-    topic_id:        _qSession.topicId,
-    question_id:     q.id || ('q_' + idx),
-    question_index:  idx,
-    question_type:   q.type || 'direct',
+    session_id:       _qSession.sessionId,
+    book_id:          _qSession.bookId,
+    chapter_id:       _qSession.chapterId,
+    topic_id:         _qSession.topicId,
+    question_id:      q.id || ('q_' + idx),
+    question_index:   idx,
+    question_type:    q.type || 'direct',
     question_subtype: q.subtype || null,
-    tags:            q.tags || [],
-    difficulty:      q.difficulty || 1,
-    profile_i:       q.profile ? q.profile.i : null,
-    profile_wm:      q.profile ? q.profile.wm : null,
-    profile_xp:      q.profile ? q.profile.xp : null,
-    time_taken:      timeTaken,
+    tags:             q.tags || [],
+    difficulty:       q.difficulty || 1,
+    profile_i:        q.profile ? q.profile.i : null,
+    profile_wm:       q.profile ? q.profile.wm : null,
+    profile_xp:       q.profile ? q.profile.xp : null,
+    time_taken:       timeTaken,
     correct,
     chosen
   };
 
-  // Re-render with answer shown
   _renderQuestion(idx);
 
-  // Update score pill
   const correct_count = _qSession.results.filter(r => r && r.correct).length;
   const answered_count = _qSession.results.filter(r => r !== undefined).length;
   const pill = document.getElementById('tsScorePill');
@@ -666,6 +668,10 @@ function qSubmitAnswer() {
 
 function qNextQuestion() {
   if (!_qSession) return;
+  if (_qSession.timerInterval) {
+    clearInterval(_qSession.timerInterval);
+    _qSession.timerInterval = null;
+  }
   const next = _qSession.current + 1;
   if (next < _qSession.questions.length) {
     _renderQuestion(next);
