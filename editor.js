@@ -552,12 +552,28 @@ document.getElementById('uploadPageFile').addEventListener('change', function() 
         if (secEl) { aiTargetSection.content = secEl.innerHTML; filled = 1; }
         aiTargetSection = null;
       } else {
+        // Try matching by data-title against existing sections
         sectionEls.forEach(secEl => {
           const dt = secEl.getAttribute('data-title');
           const sec = tp.sections.find(s => s.title.trim().toLowerCase() === (dt||'').trim().toLowerCase());
           if (sec) { sec.content = secEl.innerHTML; filled++; }
         });
-        if (filled === 0) { sectionEls.forEach((secEl, i) => { if (tp.sections[i]) { tp.sections[i].content = secEl.innerHTML; filled++; } }); }
+        // Fallback: match by index if titles didn't match
+        if (filled === 0 && tp.sections.length > 0) {
+          sectionEls.forEach((secEl, i) => {
+            if (tp.sections[i]) { tp.sections[i].content = secEl.innerHTML; filled++; }
+          });
+        }
+        // NEW: no sections exist yet — create them from AI output
+        if (filled === 0 && tp.sections.length === 0) {
+          sectionEls.forEach(secEl => {
+            const dt = secEl.getAttribute('data-title');
+            if (!dt) return;
+            const newSec = { id: uid(), title: dt, content: secEl.innerHTML, open: true };
+            tp.sections.push(newSec);
+            filled++;
+          });
+        }
       }
       saveAll(); renderPage(); renderTree();
       saveLibrary().then(() => showToast(`✓ Page content saved — ${filled} section(s) filled`)).catch(() => showToast(`✓ Page saved locally — ${filled} section(s)`));
