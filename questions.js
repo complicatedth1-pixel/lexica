@@ -531,11 +531,18 @@ function _updatePalette() {
   _qSession.questions.forEach((q, i) => {
     const btn = document.getElementById(`tsPalBtn_${i}`);
     if (!btn) return;
-    btn.classList.remove('active', 'answered-correct', 'answered-wrong');
+    btn.classList.remove('active', 'attempted', 'answered-correct', 'answered-wrong');
     if (i === _qSession.current) btn.classList.add('active');
+    
     const res = _qSession.results[i];
     if (res !== undefined) {
-      btn.classList.add(res.correct ? 'answered-correct' : 'answered-wrong');
+      if (_qSession.submitted) {
+        // Only show correct/wrong AFTER submission
+        btn.classList.add(res.correct ? 'answered-correct' : 'answered-wrong');
+      } else {
+        // Before submission just show neutral "attempted" colour
+        btn.classList.add('attempted');
+      }
     }
   });
 }
